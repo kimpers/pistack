@@ -151,19 +151,21 @@ export function parseArgs(
   };
 }
 export interface CliRuntime {
+  readonly signal?: AbortSignal;
   readonly reader: T.GitHubReader;
   readonly clock: WatchClock;
   readonly stdout: (value: string) => void;
   readonly stderr: (value: string) => void;
 }
-function realRuntime(): CliRuntime {
+function realRuntime(signal?: AbortSignal): CliRuntime {
   return {
-    reader: new GhGitHubReader(),
+    signal,
+    reader: new GhGitHubReader(signal),
     clock: {
       now: () => performance.now() / 1_000,
       observedAt: () => new Date().toISOString(),
       sleep: async (seconds) => {
-        await delay(seconds * 1_000);
+        await delay(seconds * 1_000, undefined, { signal });
       },
     },
     stdout: (value) => process.stdout.write(value),
@@ -207,7 +209,7 @@ export async function main(
     runtime.stdout(render(verdict));
     return verdict.exitCode;
   }
-  const dependencies = { reader: runtime.reader, clock: runtime.clock, emit };
+  const dependencies = { reader: runtime.reader, clock: runtime.clock, emit, signal: runtime.signal };
   const verdict =
     options.mode === "queued-stack" && !options.statusOnly
       ? await runQueued({ dependencies, contexts, options: options.polling })
@@ -218,6 +220,20 @@ export async function main(
           statusOnly: options.statusOnly,
           options: options.polling,
         });
+  runtime.signal?.throwIfAborted();
   runtime.stdout(render(verdict));
   return verdict.exitCode;
+}
+
+/** Signal handlers affect only this watcher and its own in-flight gh child, never shared workers/goals. */
+export async function runCli(argv: readonly string[]): Promise<number> {
+  const controller = new AbortController();
+  const stop = () => controller.abort(new Error("Owned watcher stopped; not success"));
+  process.once("SIGINT", stop); process.once("SIGTERM", stop);
+  try { return await main(argv, realRuntime(controller.signal)); }
+  catch (error) {
+    if (!controller.signal.aborted) throw error;
+    process.stderr.write("STOPPED: owned watcher cancelled/paused; no readiness or merge claim\n");
+    return 130;
+  } finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
 }

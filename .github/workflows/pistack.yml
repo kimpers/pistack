@@ -1,0 +1,90 @@
+name: piStack candidate qualification (manual, not release approval)
+
+on:
+  workflow_dispatch:
+    inputs:
+      approve_provisioning:
+        description: 'Approve isolated runner downloads: Node 26.0.0, Bun 1.3.14, Pi 0.85.1, core candidates and frozen helper lock (see pi/UPSTREAM.md)'
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    if: ${{ inputs.approve_provisioning }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Candidate versions, NOT a qualified support set. No auth or live model calls.
+      PISTACK_CI_PROVISION: 'true'
+      PI_OFFLINE: '1'
+      npm_config_update_notifier: 'false'
+      GIT_TERMINAL_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.0.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+      - name: Isolate all settings, caches and npm host packages
+        run: |
+          mkdir -p "$RUNNER_TEMP/pistack-home/.pi/agent" "$RUNNER_TEMP/pistack-host" evals/results/ci
+          echo "HOME=$RUNNER_TEMP/pistack-home" >> "$GITHUB_ENV"
+          echo "PI_CODING_AGENT_DIR=$RUNNER_TEMP/pistack-home/.pi/agent" >> "$GITHUB_ENV"
+          echo "npm_config_cache=$RUNNER_TEMP/pistack-npm-cache" >> "$GITHUB_ENV"
+          echo "PISTACK_TEST_PI_ROOT=$RUNNER_TEMP/pistack-host/lib/node_modules/@earendil-works/pi-coding-agent" >> "$GITHUB_ENV"
+          echo "PISTACK_TEST_SUBAGENTS_ROOT=$RUNNER_TEMP/pistack-home/.pi/agent/npm/node_modules/pi-subagents" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/pistack-host/bin" >> "$GITHUB_PATH"
+      - name: Approved exact Pi host provisioning
+        run: |
+          set -o pipefail
+          npm install --global --prefix "$RUNNER_TEMP/pistack-host" @earendil-works/pi-coding-agent@0.85.1 2>&1 | tee evals/results/ci/provisioning.log
+      - name: Approved real setup and existing-extension rerun
+        # Uses public piStack proposal/application. Exact core candidates:
+        # pi-subagents 0.66.0, pi-interactive-shell 0.15.2, pi-goal 0.1.7.
+        # Helpers use bun install --frozen-lockfile in the owned scripts directory;
+        # commander 14.0.0, bun-types 1.3.14, TypeScript 7.0.2 are lock resolutions.
+        # No optional browser/MCP/web/interview package, browser runtime or auth download.
+        run: |
+          set -o pipefail
+          node --import ./tests/host-loader.mjs evals/installed-setup.ts 2>&1 | tee evals/results/ci/installed-setup.log
+      - name: Record actual runner and installed versions
+        run: |
+          mkdir -p evals/results/ci
+          { uname -a; node --version; npm --version; bun --version; pi --version; git --version; npm list --prefix "$PI_CODING_AGENT_DIR/npm" --depth=0; } > evals/results/ci/versions.txt
+      - name: Package, clean/existing fixtures, SDK, upstream rehearsal and workflow suites
+        run: |
+          set -o pipefail
+          node --import ./tests/host-loader.mjs --test --test-reporter=tap tests/*.test.ts | tee evals/results/ci/tests.tap
+      - name: Installed retained helper tests, typecheck and read-only help
+        working-directory: pstack/skills/poteto-mode/scripts
+        run: |
+          set -o pipefail
+          bun test orch watch-pr 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/helpers-tests.log"
+          bun run typecheck 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/helpers-typecheck.log"
+          bun run orch/orch.ts --help 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/orch-help.log"
+          bun run watch-pr/watch-pr --help 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/watcher-help.log"
+      - name: Representative deterministic evaluations (not live workflow proof)
+        run: node evals/run.mjs evals/results/ci/evals.json
+      - name: Preserve qualification evidence without publishing a package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pistack-candidate-${{ matrix.os }}
+          path: evals/results/ci/
+          if-no-files-found: warn

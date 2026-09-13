@@ -4,6 +4,9 @@ description: "Apply when sequencing an addition, refactor, or rewrite. Remove de
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Subtract Before You Add
 
 When evolving a system, remove complexity first, then build. Deletion gives you a simpler base, which makes the next addition smaller and less brittle.

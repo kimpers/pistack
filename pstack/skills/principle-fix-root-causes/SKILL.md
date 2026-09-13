@@ -4,6 +4,9 @@ description: "Apply when debugging. Trace each symptom to its root cause and fix
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Fix Root Causes
 
 When debugging, do not paper over symptoms. Trace every problem to its root cause and fix it there.

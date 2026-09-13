@@ -3,6 +3,9 @@ name: principle-build-the-lever
 description: "Apply to any non-trivial work, not just bulk work: edits, migrations, analyses, checks. Build the tool that does it or proves it (codemod, script, generator, or a skill your subagents follow) instead of working by hand. The tool is the artifact a reviewer can rerun."
 disable-model-invocation: true
 ---
+
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
 # Build the Lever
 
 When the work isn't trivial, build the tool that does it instead of doing it by hand.
@@ -15,7 +18,7 @@ When the work isn't trivial, build the tool that does it instead of doing it by 
 - Codemod or script for edits, generator for repetitive files, a dump-to-sqlite query for analysis, a rerunnable check for verification.
 - A deterministic lever beats fan-out. If the tool can process every unit in one pass, run it yourself; don't fan out delegates to hand-apply what a script can do.
 - When you fan work out to subagents, write the lever as a skill they all read: the recipe, the verification contract, and the do-not-touch fences in one artifact, so every delegate inherits the same hardened version instead of re-explaining it per prompt and watching each one drift. Keep it outside the delegates' write scope so they can't quietly edit the contract.
-- Applying this principle produces a file. If you cited it and there is no codemod, script, generator, or delegate skill in the diff, you didn't apply it.
+- For authorized implementation, produce a rerunnable artifact when it earns its keep. Read-only scope requires no file; name an existing lever or propose one instead.
 - Commit the lever when the work outlives the session, so the next run reruns it instead of redoing it.
 
 **Balance:** The bar is triviality, not repetition. A one-off still earns a lever when the lever is what makes the work checkable. Per the [Laziness Protocol](../principle-laziness-protocol/SKILL.md), build the smallest script that does or proves the job, never a framework.

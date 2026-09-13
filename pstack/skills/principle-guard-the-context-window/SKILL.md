@@ -4,6 +4,9 @@ description: "Apply when context is filling up: large outputs, long files, repea
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Guard the Context Window
 
 The context window is finite and non-renewable within a session. Every token that enters should earn its place.

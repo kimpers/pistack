@@ -1,5 +1,8 @@
 ### Investigation
 
+Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
+
+
 **You own the answer. Plan, route, write.**
 
 Read-only requests: "how does X work?", "why was Y built this way?", "are we sure about Z?", "should we do X or Y?". They produce a cited explanation or a recommendation, not a code change.

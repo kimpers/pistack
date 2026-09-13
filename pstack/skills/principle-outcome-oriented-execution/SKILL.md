@@ -4,6 +4,9 @@ description: "Apply during planned rewrites and migrations with explicit phase b
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Outcome-Oriented Execution
 
 Optimize for the intended, verifiable end state rather than preserving smooth intermediate states.

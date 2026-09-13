@@ -1,8 +1,11 @@
 ### Authoring or modifying a skill
 
+Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
+
+
 **You own the skill's voice.** Agent-facing prose has a higher bar than human prose; unhelpful sentences become instructions.
 
-1. Use the **create-skill** skill (Cursor's built-in for authoring SKILL.md files).
+1. Use [Pi authoring](../../../../pi/references/authoring.md) in an approved project/personal override or development fork, never installed files.
 2. Validate the skill: frontmatter has `name` and `description`, referenced files exist, cross-skill links resolve.
 3. Test cases if structural; skip if subjective.
 4. Run **Opening a PR**.

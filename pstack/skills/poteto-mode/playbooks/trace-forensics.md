@@ -1,5 +1,8 @@
 ### Trace forensics
 
+Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
+
+
 **You own the diagnosis from the artifact. Load it, shape it, narrow to the cause, attribute to source.** For a dropped `.cpuprofile`, `Trace-*.json.gz`, `Spindump.txt`, or `.heapsnapshot` paired with "why is this slow / unresponsive / leaking / crashing".
 
 Distinct from **Runtime forensics**, which instruments the live process. Here the capture already exists; the artifact is a fixed dataset, read it, don't re-run it. Keep tooling generic so the playbook stays portable: a DevTools or trace parser for cpuprofile and `.json.gz`, a text editor for a spindump, your heap tooling for a heapsnapshot.

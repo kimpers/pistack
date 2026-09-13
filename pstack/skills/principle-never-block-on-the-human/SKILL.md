@@ -4,6 +4,9 @@ description: "Apply when tempted to ask 'should I do X?' on reversible work. Pro
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Never Block on the Human
 
 The human supervises asynchronously. Agents must stay unblocked: make reasonable decisions, proceed, and let the human course-correct after the fact. Code is cheap. Waiting is expensive.
@@ -19,5 +22,5 @@ The human supervises asynchronously. Agents must stay unblocked: make reasonable
 
 **Boundaries:**
 - **Irreversible actions** (force-push, delete production data, send external messages) still require confirmation.
-- **Reversible actions** (write code, edit notes, split tasks) should proceed without blocking.
+- **Reversible actions** (write code, edit notes, split tasks) proceed only within authorized scope and harness permissions. Installs, scope changes and unresolved product choices still require approval.
 - **Product direction** comes from the human; *execution* should not block.

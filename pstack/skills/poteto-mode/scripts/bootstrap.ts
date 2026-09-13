@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const scriptsDirectory = import.meta.dir;
@@ -32,31 +32,9 @@ export function ensureDependenciesInstalled(): void {
     return;
   }
 
-  const result = Bun.spawnSync(
-    [process.execPath, "install", "--frozen-lockfile"],
-    { cwd: scriptsDirectory }
+  throw new Error(
+    "Retained pstack helpers are not ready for this lockfile. Run /pistack setup " +
+    "and explicitly approve retained Bun helper dependencies. This command " +
+    "does not install packages or restart itself."
   );
-  if (result.exitCode !== 0) {
-    process.stdout.write(result.stdout);
-    process.stderr.write(result.stderr);
-    throw new Error(
-      `bun install --frozen-lockfile exited with status ${result.exitCode}`
-    );
-  }
-  if (!existsSync(commanderPackagePath)) {
-    throw new Error(
-      "bun install --frozen-lockfile completed without installing commander"
-    );
-  }
-
-  writeFileSync(installKeyPath, `${installKey}\n`);
-
-  const restarted = Bun.spawnSync([process.execPath, ...process.argv.slice(1)], {
-    cwd: process.cwd(),
-    env: process.env,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  process.exit(restarted.exitCode ?? 1);
 }

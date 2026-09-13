@@ -1,3 +1,7 @@
+# Pi integration is source, even when a user's global ignore hides pi/**.
+!/pi/
+!/pi/**
+
 # OS files
 .DS_Store
 Thumbs.db

@@ -92,7 +92,7 @@ export function fakeReader(
     },
     async pullRequest(requested) {
       calls.push("pullRequest");
-      return { ...defaults, ...options.facts, context: requested };
+      return { ...defaults, headRefName: `feature-${requested.number}`, baseRefName: `feature-${requested.number - 1}`, ...options.facts, context: requested };
     },
     async openPullRequests() {
       calls.push("openPullRequests");
@@ -104,7 +104,7 @@ export function fakeReader(
     },
     async checkRollupPage(_requested, after) {
       calls.push(`checkRollupPage:${after ?? "null"}`);
-      return options.rollupPages?.[page++] ?? { checks: [], endCursor: null };
+      return options.rollupPages?.[page++] ?? { headRefOid: "head", checks: [], endCursor: null };
     },
     async reviewThreads() {
       calls.push("reviewThreads");

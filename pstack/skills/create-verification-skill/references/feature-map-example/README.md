@@ -1,5 +1,7 @@
 # Notes verification map
 
+This is an illustrative feature-map template, not a shipped Notes app or control-notes harness. Generate real project commands and prove them before use.
+
 This directory is the maintained source for verifying the user-facing behavior of Notes. Read the index before driving the app, then use the matching feature file as the recipe.
 
 ## Baseline preconditions

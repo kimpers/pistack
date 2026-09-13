@@ -160,6 +160,8 @@ export interface ReadyPr {
   readonly kind: "ready-pr";
   readonly context: PrContext;
   readonly proof: {
+    readonly headRefOid: string;
+    readonly mergeAuthorization: false;
     readonly mergeability: "clear";
     readonly threads: readonly [];
     readonly ci: CiClean;
@@ -201,6 +203,7 @@ export type MergeBlocker =
       readonly reason: MergeGateReason;
     };
 export type QueryFailure =
+  | { readonly kind: "frontier-changed"; readonly retryable: false; readonly detail: string }
   | {
       readonly kind: "json-parse";
       readonly retryable: true;
@@ -376,6 +379,7 @@ export type ChecksFastPath =
       readonly stderr: string;
     };
 export interface RollupPage {
+  readonly headRefOid: string | null;
   readonly checks: readonly Check[];
   readonly endCursor: string | null;
 }

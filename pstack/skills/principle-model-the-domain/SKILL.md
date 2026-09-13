@@ -4,6 +4,9 @@ description: "Apply when writing stateful logic, or when code branches a lot or 
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Model the Domain
 
 Encode the real domain in a data structure instead of scattering it across conditionals.

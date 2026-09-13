@@ -4,6 +4,9 @@ description: "Apply when you catch yourself writing the same instruction a secon
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Encode Lessons in Structure
 
 Encode recurring fixes in mechanisms (tools, code, metadata, automation) instead of textual instructions. Every error, human correction, and unexpected outcome is a learning signal. Capture it, route it, and close the loop.
@@ -22,8 +25,8 @@ When you catch yourself writing the same instruction a second time:
 
 **Feedback loop:**
 - **Capture every correction.** When the human intervenes or tests fail, decide if it's a one-off or a pattern.
-- **Route to the right layer.** One-off -> brain note. Recurring fix -> skill or lint rule. Systemic issue -> principle.
-- **Close the loop.** Don't just record. Apply now or create a concrete todo.
+- **Route to the right layer.** One-off -> session finding. Recurring fix -> proposed skill or lint rule. Systemic issue -> proposed principle edit in an approved destination.
+- **Close the loop.** Don't just record. Apply within existing authorization or present a concrete proposal for review; never edit installed skills or personal policy implicitly.
 
 **Anti-patterns:**
 - Acknowledging without recording ("I'll keep that in mind" does not persist)

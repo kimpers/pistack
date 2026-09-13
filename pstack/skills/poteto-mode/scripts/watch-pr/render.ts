@@ -151,7 +151,7 @@ export function renderPretty(verdict: T.WatcherVerdict): string {
         verdict.scope.kind === "single" && verdict.scope.pr.kind === "ready-pr"
           ? `\nmergeStateStatus=${verdict.scope.pr.proof.ci.github.mergeStateStatus}\nreviewDecision=${verdict.scope.pr.proof.gate.reviewDecision}\nisDraft=${verdict.scope.pr.proof.gate.draft === "draft-allowed"}${verdict.scope.pr.proof.gate.draft === "draft-allowed" ? "\nnote=draft allowed (--allow-draft); leave draft \u2014 do not mark ready" : ""}`
           : "";
-      return `READY: no merge conflicts, no unresolved review threads, no failing or pending checks${detail}\n`;
+      return `READY: no merge conflicts, no unresolved review threads, no failing or pending checks; observation only, not merge authorization${detail}\n`;
     }
     case "COMPLETE":
       return `COMPLETE: queued stack merged (${verdict.queue.length} PR${verdict.queue.length === 1 ? "" : "s"})\n`;

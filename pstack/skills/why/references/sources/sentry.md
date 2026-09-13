@@ -61,7 +61,7 @@ Use the Sentry MCP.
 
    Cross-reference release version with the PR's merge date.
 
-6. **Use Seer sparingly.**
+6. **Use Seer only when explicitly authorized.** It starts external analysis rather than merely reading stored evidence; ordinary source investigation does not grant that authority.
 
    ```
    analyze_issue_with_seer

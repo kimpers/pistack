@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import process from "node:process";
+import { executionProfile } from "../../../../pi/lib/execution-profile.ts";
 
 const RULE =
 	"Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.";
-const LANES = "Ten lanes on `grok-4.6-fast-xhigh` at the PR head";
+
 const SUB_BLOCKS = [
 	"Depends on.",
 	"Files.",
@@ -17,7 +18,7 @@ const SUB_BLOCKS = [
 	"Merge.",
 ];
 const PROGRAM_H3 = ["Arm the program", "Spawn owners", "PR mechanics", "Verdict and merge", "Boot recipe"];
-const PROGRAM_MARKERS = ["/goal", "git show origin/main:", /30[- ]minute/, "status message"];
+const PROGRAM_MARKERS = ["status message", "explicit go", "native completion notifications"];
 const HOW_TO_READ_MARKERS = [
 	"One box is one unit of work",
 	"names the evidence",
@@ -29,11 +30,16 @@ const PERF_ITEMS = ["Metric.", "Probe.", "Baseline.", "Rule."];
 const BOX = /^\s*- \[[ x]\] (.*)$/;
 
 const file = process.argv[2];
-if (!file) {
-	console.error("Usage: node check-plan.mjs <plan.md>");
+if (!file || !process.argv[3] || process.argv.length !== 4) {
+	console.error("Usage: node check-plan.mjs <plan.md> <execution-profile.json>");
 	process.exit(2);
 }
 
+let profile;
+try { profile = executionProfile(JSON.parse(fs.readFileSync(process.argv[3], "utf8"))); }
+catch (error) { console.error(`Invalid execution profile: ${error.message}`); process.exit(2); }
+console.log(profile.marker);
+console.log("Model discovery snapshot only; not launch/authentication proof. Readiness is not merge authorization.");
 const raw = fs.readFileSync(file, "utf8").split(/\r?\n/);
 const problems = [];
 const fail = (line, message) => problems.push(`${file}:${line}: ${message}`);
@@ -99,6 +105,14 @@ else {
 	}
 }
 
+if (program) {
+  const text = bodyText(program);
+  const continuation = profile.continuation === "manual" ? "Manual continuation only. No goal or scheduler." : "pi-goal is the sole continuation owner.";
+  if (!text.includes(continuation)) fail(program.n, `Program lacks "${continuation}"`);
+  if (profile.continuation === "manual" && /\/goal|create_goal|30[- ]minute/.test(text)) fail(program.n, "Manual profile must not arm a goal or periodic continuation");
+  for (const approval of [profile.coverageApproval, profile.continuationApproval].filter(Boolean))
+    if (!text.includes(approval)) fail(program.n, `Program lacks approval evidence "${approval}"`);
+}
 const close = find("Close the program");
 if (!close) fail(1, 'no "## Close the program" section');
 const programIndex = sections.indexOf(program);
@@ -136,13 +150,14 @@ for (const pr of prSections) {
 
 	const live = block("Verify, live.");
 	if (live) {
-		if (!live.rest.includes(LANES)) fail(live.n, `${pr.title}: Verify, live lacks "${LANES}"`);
+		if (!live.rest.includes(profile.marker)) fail(live.n, `${pr.title}: Verify, live lacks "${profile.marker}"`);
 		const lanes = boxes(live.lines).map((b) => ({ ...b, m: b.text.match(/^Lane (\d+)\. /) }));
 		const numbers = lanes.filter((b) => b.m).map((b) => Number(b.m[1])).sort((a, b) => a - b);
-		if (numbers.join(",") !== "1,2,3,4,5,6,7,8,9,10") fail(live.n, `${pr.title}: lanes are [${numbers.join(",")}], expected 1 to 10`);
+		if (numbers.join(",") !== Array.from({ length: profile.scenarios }, (_, i) => i + 1).join(",")) fail(live.n, `${pr.title}: lanes are [${numbers.join(",")}], expected 1 to ${profile.scenarios}`);
+		if (!lanes.some(lane => lane.text.includes("Regression lane against trunk"))) fail(live.n, `${pr.title}: no regression lane against trunk`);
 		for (const lane of lanes) {
 			if (!lane.m) fail(lane.n, `${pr.title}: live box is not a lane`);
-			else if (!/Save `[^`]+`/.test(lane.text)) fail(lane.n, `${pr.title}: lane ${lane.m[1]} names no screenshot`);
+			else if (!/Save `[^`]+`/.test(lane.text)) fail(lane.n, `${pr.title}: lane ${lane.m[1]} names no evidence artifact`);
 			else if (!lane.text.includes("Pass when")) fail(lane.n, `${pr.title}: lane ${lane.m[1]} has no pass predicate`);
 		}
 	}
@@ -161,7 +176,7 @@ for (const pr of prSections) {
 		} else {
 			const text = gate.lines.map((l) => l.text).join("\n");
 			if (gateBoxes.length === 0) fail(gate.n, `${pr.title}: Review gate has no box`);
-			for (const word of ["screenshot", "video", "operator"]) {
+			for (const word of profile.surface === "visual" ? ["screenshot", "video", "operator"] : ["evidence", "operator"]) {
 				if (!text.includes(word)) fail(gate.n, `${pr.title}: Review gate lacks "${word}"`);
 			}
 		}

@@ -31,6 +31,8 @@ async function mergeAssessment(
   facts: T.PullRequestFacts
 ) {
   const commits = await reader.commitRollups(facts.context);
+  if (!facts.headRefOid || !commits.some(commit => commit.oid === facts.headRefOid))
+    throw new WatcherQueryError({ kind: "checks-unavailable", retryable: true, detail: "Current head has no commit rollup evidence; prior passing heads are not verification" });
   const headRollupState =
     facts.headRefOid === null
       ? null
@@ -57,14 +59,21 @@ export async function readSnapshot(args: {
   readonly context: T.PrContext;
   readonly pendingHistory: "include" | "omit";
   readonly allowDraft: boolean;
+  readonly signal?: AbortSignal;
 }): Promise<T.PrSnapshot> {
+  args.signal?.throwIfAborted();
   const facts = await args.reader.pullRequest(args.context);
-  if (facts.state === "MERGED" || facts.mergedAt !== null)
+  args.signal?.throwIfAborted();
+  if ((facts.state === "MERGED") !== (facts.mergedAt !== null))
+    throw new WatcherQueryError({ kind: "checks-unavailable", retryable: true, detail: "Inconsistent forge merge evidence" });
+  if (facts.state === "MERGED")
     return { kind: "merged", context: args.context, facts };
   if (facts.state === "CLOSED")
     return { kind: "closed", context: args.context, facts };
   const threads = await args.reader.reviewThreads(args.context);
-  const checks = await resolveChecks(args.reader, args.context);
+  args.signal?.throwIfAborted();
+  let checks = await resolveChecks(args.reader, args.context);
+  args.signal?.throwIfAborted();
   const failed = nonEmpty(
     checks.checks.filter(
       (check): check is T.FailedCheck => check.kind === "failed"
@@ -87,6 +96,12 @@ export async function readSnapshot(args: {
     };
   else {
     const merge = await mergeAssessment(args.reader, facts);
+    let pendingOwnerGateProven = false;
+    if (failed === null && pending === null && merge.github.headRollupState === "PENDING" && checks.checks.some(check => check.kind === "code-review-gate")) {
+      checks = await resolveChecks(args.reader, args.context, facts.headRefOid!);
+      pendingOwnerGateProven = checks.checks.some(check => check.kind === "code-review-gate") &&
+        checks.checks.every(check => check.kind === "passed" || check.kind === "skipped" || check.kind === "code-review-gate");
+    }
     const base = {
       source: checks.source,
       all: checks.checks,
@@ -110,6 +125,8 @@ export async function readSnapshot(args: {
       };
     else if (pending !== null)
       ci = { ...base, kind: "ci-pending", failed: [], pending };
+    else if (merge.github.headRollupState !== "SUCCESS" && !pendingOwnerGateProven)
+      throw new WatcherQueryError({ kind: "checks-unavailable", retryable: true, detail: "Settled check list lacks passing current-head rollup evidence" });
     else
       ci = {
         ...base,
@@ -119,6 +136,11 @@ export async function readSnapshot(args: {
         github: merge.github,
       };
   }
+  args.signal?.throwIfAborted();
+  const fresh = await args.reader.pullRequest(args.context);
+  args.signal?.throwIfAborted();
+  if (!facts.headRefOid || JSON.stringify(fresh) !== JSON.stringify(facts))
+    throw new WatcherQueryError({ kind: "checks-unavailable", retryable: true, detail: "PR head/state/topology changed during observation; discard stale checks" });
   return {
     kind: "open",
     context: args.context,
@@ -200,6 +222,8 @@ function readyContribution(
     kind: "ready-pr",
     context: row.context,
     proof: {
+      headRefOid: row.facts.headRefOid!,
+      mergeAuthorization: false,
       mergeability: "clear",
       threads: [],
       ci: row.ci,
@@ -341,6 +365,7 @@ export interface WatchClock {
   sleep(seconds: number): Promise<void>;
 }
 export interface RunDependencies {
+  readonly signal?: AbortSignal;
   readonly reader: T.GitHubReader;
   readonly clock: WatchClock;
   readonly emit: (verdict: T.ProgressVerdict) => void;
@@ -367,11 +392,14 @@ async function pollUntilTerminal<V>(args: {
   let failures = 0;
   const started = args.dependencies.clock.now();
   while (true) {
+    args.dependencies.signal?.throwIfAborted();
     let result: StepResult<V>;
     try {
       result = await args.step();
+      args.dependencies.signal?.throwIfAborted();
       failures = 0;
     } catch (error) {
+      args.dependencies.signal?.throwIfAborted();
       if (!(error instanceof WatcherQueryError)) throw error;
       failures += 1;
       if (!error.failure.retryable || failures >= args.options.maxQueryErrors)
@@ -423,6 +451,7 @@ export async function runSimple(args: {
     for (const context of args.contexts)
       rows.push(
         await readSnapshot({
+          signal: args.dependencies.signal,
           reader: args.dependencies.reader,
           context,
           pendingHistory: "include",
@@ -531,7 +560,10 @@ export interface QueueState {
 export const createQueueState = (
   queue: T.NonEmpty<T.PrContext>,
   now: number
-): QueueState => ({
+): QueueState => {
+  if (new Set(queue.map(pr => pr.number)).size !== queue.length || queue.some(pr => pr.owner !== queue[0].owner || pr.repo !== queue[0].repo))
+    throw new Error("Frozen queue must contain unique PRs from one repository");
+  return ({
   queue,
   snapshots: new Map(),
   work: { kind: "whole-stack-sweep", remaining: queue },
@@ -540,6 +572,7 @@ export const createQueueState = (
   lastWaitKey: null,
   startedAt: now,
 });
+};
 const orderedRows = (state: QueueState): T.PrSnapshot[] =>
   state.queue.flatMap((context) => {
     const row = state.snapshots.get(context.number);
@@ -574,9 +607,23 @@ export function applyQueueSnapshot(
   options: T.PollingOptions
 ): QueueSnapshotResult {
   if (state.work === null) throw new Error("queue has no read in flight");
+  const previous = state.snapshots.get(snapshot.context.number);
+  const index = state.queue.findIndex(pr => pr.number === snapshot.context.number);
+  const parent = index > 0 ? state.snapshots.get(state.queue[index - 1].number) : undefined;
+  const trunk = state.snapshots.get(state.queue[0].number)?.facts.baseRefName;
+  if (index < 0 || snapshot.context.owner !== state.queue[0].owner || snapshot.context.repo !== state.queue[0].repo ||
+      (previous && (previous.facts.headRefName !== snapshot.facts.headRefName ||
+        (previous.facts.baseRefName !== snapshot.facts.baseRefName && !(parent?.kind === "merged" && snapshot.facts.baseRefName === trunk)))))
+    throw new WatcherQueryError({ kind: "frontier-changed", retryable: false, detail: "Frozen queue topology changed; require owner reconciliation" });
+  if (parent && snapshot.facts.baseRefName !== parent.facts.headRefName && !(parent.kind === "merged" && snapshot.facts.baseRefName === trunk))
+    throw new WatcherQueryError({ kind: "frontier-changed", retryable: false, detail: "Frozen queue is not in base-branch order" });
+  if ([...state.snapshots.values()].some(row => row.context.number !== snapshot.context.number && row.facts.headRefName === snapshot.facts.headRefName))
+    throw new WatcherQueryError({ kind: "frontier-changed", retryable: false, detail: "Ambiguous frozen queue head branches" });
   const snapshots = new Map(state.snapshots);
   snapshots.set(snapshot.context.number, snapshot);
-  const base = { ...state, snapshots };
+  const base = { ...state, snapshots, lastWaitKey: previous?.facts.headRefOid !== snapshot.facts.headRefOid ? null : state.lastWaitKey };
+  if (state.work.kind === "frontier-poll" && state.work.frontier.number !== snapshot.context.number)
+    throw new Error("snapshot does not match frontier");
   if (state.work.kind === "frontier-poll")
     return { state: { ...base, work: null }, completedSweepRows: null };
   const [head, ...tail] = state.work.remaining;
@@ -642,6 +689,7 @@ export function evaluateQueue(
   now: number,
   options: T.PollingOptions
 ): QueueEvaluation {
+  if (state.snapshots.size !== state.queue.length || state.work !== null) throw new Error("Incomplete queue observation cannot establish readiness or completion");
   const active = activeRows(state);
   if (active.length === 0) {
     const merged = nonEmpty(
@@ -736,6 +784,7 @@ export async function runQueued(args: {
         ? state.work.remaining[0]
         : state.work.frontier;
     const snapshot = await readSnapshot({
+      signal: args.dependencies.signal,
       reader: args.dependencies.reader,
       context,
       pendingHistory: "omit",

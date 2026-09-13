@@ -472,9 +472,9 @@ function createProgram(io: Io): Command {
 
   const frontier = program
     .command("frontier")
-    .description("manage the Graphite stack frontier")
+    .description("manage the gh base-branch stack frontier")
     .action(() => requireSubcommand(program));
-  leaf(frontier, "set", "discover the Graphite stack and set the frontier")
+  leaf(frontier, "set", "discover the gh base-branch stack and set the frontier")
     .addOption(
       new Option(
         "--repo <dir>",
@@ -483,7 +483,7 @@ function createProgram(io: Io): Command {
     )
     .option(
       "--prs <n,...>",
-      "optional expected pull request order pin",
+      "frozen bottom-to-top pull request list (otherwise discover current open stack)",
       prList
     )
     .action((options: FrontierSetOptions) =>

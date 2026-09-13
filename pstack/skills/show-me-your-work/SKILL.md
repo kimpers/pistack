@@ -1,8 +1,11 @@
 ---
 name: show-me-your-work
-description: "Keep a reviewable decision trail for long-running or unattended work: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /show-me-your-work, autonomous or multi-phase runs, or work a human reviews after stepping away."
+description: "Keep a reviewable decision trail for long-running or unattended work: a TSV log with one row per decision (what, why, evidence, result). Local by default; commit it when a reviewer needs the trail to trust the result. Use for /skill:show-me-your-work, autonomous or multi-phase runs, or work a human reviews after stepping away."
 disable-model-invocation: true
 ---
+
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
 
 # Show me your work
 
@@ -53,18 +56,17 @@ Commit it only when the work is ambitious enough that a reviewer needs the trail
 
 ## Audit the log against the transcript
 
-At the end of the run, before handing back, check the log told the truth. Read this run's transcript under the active workspace's `agent-transcripts/` directory (the system prompt names the path). Don't glob across `~/.cursor/projects/*/`; that reads unrelated private chats. Walk the log against what actually happened:
+At the end of the run, audit against the active Pi session's selected ancestry per [the history contract](../../../pi/references/history.md). Call `pistack_history` with `{"action":"read","purpose":"show-me-your-work"}` and explicit `since`/`until` covering the run. Put returned `pi-session:<id>/entry:<id>?leaf=<id>` references in the existing evidence column; they are stable identifiers, not clickable URLs. Narrow windows to retrieve omitted evidence and disclose gaps. Alternate-branch actions are labeled separately and must not be presented as current-branch work.
 
-- Every row maps to a real action. Cut invented or aspirational entries.
-- Each row's evidence resolves and shows what the row claims.
-- A fork, pivot, or abandoned approach that shaped the work but isn't logged is a gap. Add it.
-- Drop padding. If nobody would audit a row, it doesn't earn its place.
+- Every row maps to a real action and resolving evidence.
+- Correct invented, aspirational, padded or contradicted entries by appending a superseding row that identifies the original timestamp/decision. Never delete or rewrite the original.
+- Append missed forks, pivots and abandoned approaches with their actual evidence.
 
-Fix the log, not the story. If the work diverged from what a row claims, the row is wrong.
+Fix the record with append-only corrections, not a rewritten story.
 
 ## Cross-model review of the trail
 
-Before handing back, you must spawn a subagent on a different model family from the one that did the work. Self-review is not a substitute; the point is fresh eyes you cannot bring yourself. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
+Before handing back, launch an independent fresh native analyst from the configured `arena cross-judge pool`, preferring a different model family. Self-review is not a substitute. Disclose same-model review if diversity is unavailable; do not claim a required diverse-model gate passed without user acceptance. The subagent reads the audit trail and the run's transcript, then flags what the user should pay attention to. Not a redo of the work, a scan for what's suboptimal or risky.
 
 - Decisions logged with weak or absent evidence.
 - Verification steps skipped or claimed without proof in the transcript.

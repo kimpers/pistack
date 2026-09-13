@@ -4,6 +4,9 @@ description: "Apply when product, UX, or feature-scope tradeoffs come up. Choose
 disable-model-invocation: true
 ---
 
+Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
+
+
 # Experience First
 
 The product is the experience. Every technical decision either helps or hurts it. When implementation convenience conflicts with user delight, choose delight.

@@ -1,0 +1,47 @@
+[
+  {
+    "id": "bug-fix",
+    "task": "Reproduce and fix a pagination boundary defect in an isolated module; show red before and green after without shipping the red state.",
+    "file": "tests/evals.test.ts",
+    "pattern": "^eval bug-fix fixture",
+    "minimumPasses": 1,
+    "evidenceKind": "executed deterministic red/green fixture",
+    "liveGate": "Model-driven repository bug fix, independent review and real app regression proof have not been observed."
+  },
+  {
+    "id": "review",
+    "task": "Plan a four-context review with one discovered model and concurrency two; preserve rubric/join/parent acceptance and disclose same-model panels.",
+    "file": "tests/workflows.test.ts",
+    "pattern": "^delegation contracts",
+    "minimumPasses": 1,
+    "evidenceKind": "role resolution execution plus static delegation contracts",
+    "liveGate": "Authenticated native independent child reviews, completion/join/cancel and parent acceptance have not been observed."
+  },
+  {
+    "id": "ui-proof",
+    "task": "Require actual input/action/result evidence from an existing app harness; reject source inspection or a generated verification draft as visual proof.",
+    "file": "tests/workflows.test.ts",
+    "pattern": "^verification and teaching",
+    "minimumPasses": 1,
+    "evidenceKind": "static verification policy regression only",
+    "liveGate": "Browser/Electron/PTY application execution, image inspection and surviving evidence artifacts have not been observed."
+  },
+  {
+    "id": "autonomous-pause-resume",
+    "task": "Pause only the owned continuation, retain unrelated workers and require explicit fresh native resume authority.",
+    "file": "tests/autonomy.test.ts",
+    "pattern": "^pause/cancel|^native notifications",
+    "minimumPasses": 2,
+    "evidenceKind": "watcher abort execution with injected reader/clock plus static native lifecycle contract",
+    "liveGate": "Live goal pause/reload/resume, interactive monitor settlement and native worker/worktree transfer have not been observed."
+  },
+  {
+    "id": "reflection",
+    "task": "Read selected session ancestry and propose a reviewed override without mutating installed skills or source sessions.",
+    "file": "tests/history.test.ts",
+    "pattern": "^history reflection destination|^history public tools",
+    "minimumPasses": 2,
+    "evidenceKind": "executed history/reflection adapters with isolated filesystem and registered-tool fixtures",
+    "liveGate": "Model-generated reflection, human approval of accepted rows and applied personal/development-fork edits have not been observed."
+  }
+]

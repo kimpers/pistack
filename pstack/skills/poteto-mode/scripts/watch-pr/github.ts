@@ -6,7 +6,7 @@ export const REVIEW_THREADS_QUERY =
 export const PR_COMMIT_STATUS_QUERY =
   "\nquery PrCommitStatuses($owner: String!, $repo: String!, $pr: Int!) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      commits(last: 50) {\n        nodes {\n          commit {\n            oid\n            statusCheckRollup {\n              state\n            }\n          }\n        }\n      }\n    }\n  }\n}\n";
 export const PR_CHECK_ROLLUP_QUERY =
-  "\nquery PrCheckRollup($owner: String!, $repo: String!, $pr: Int!, $after: String) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      commits(last: 1) {\n        nodes {\n          commit {\n            statusCheckRollup {\n              contexts(first: 100, after: $after) {\n                pageInfo {\n                  hasNextPage\n                  endCursor\n                }\n                nodes {\n                  __typename\n                  ... on CheckRun {\n                    name\n                    status\n                    conclusion\n                    detailsUrl\n                  }\n                  ... on StatusContext {\n                    context\n                    state\n                    targetUrl\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n";
+  "\nquery PrCheckRollup($owner: String!, $repo: String!, $pr: Int!, $after: String) {\n  repository(owner: $owner, name: $repo) {\n    pullRequest(number: $pr) {\n      commits(last: 1) {\n        nodes {\n          commit {\n            oid\n            statusCheckRollup {\n              contexts(first: 100, after: $after) {\n                pageInfo {\n                  hasNextPage\n                  endCursor\n                }\n                nodes {\n                  __typename\n                  ... on CheckRun {\n                    name\n                    status\n                    conclusion\n                    detailsUrl\n                  }\n                  ... on StatusContext {\n                    context\n                    state\n                    targetUrl\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n";
 
 interface CommandResult {
   readonly code: number;
@@ -29,10 +29,11 @@ export class ChecksUnavailable extends WatcherQueryError {
 }
 const firstLine = (value: string): string =>
   value.trim().split(/\r?\n/, 1)[0]?.slice(0, 240) ?? "";
-function run(argv: readonly [string, ...string[]]): Promise<CommandResult> {
+function run(argv: readonly [string, ...string[]], signal?: AbortSignal): Promise<CommandResult> {
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(argv[0], argv.slice(1), {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"], signal, timeout: 30_000,
     });
     let stdout = "";
     let stderr = "";
@@ -44,8 +45,10 @@ function run(argv: readonly [string, ...string[]]): Promise<CommandResult> {
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code: code ?? -1, stdout, stderr }));
+    let failure: Error | undefined;
+    child.on("error", (error) => { failure = error; });
+    // Abort is not settled until this exact owned subprocess closes.
+    child.on("close", (code) => failure ? reject(failure) : resolve({ code: code ?? -1, stdout, stderr }));
   });
 }
 function parseJson(text: string, label: string): unknown {
@@ -58,18 +61,6 @@ function parseJson(text: string, label: string): unknown {
       detail: `${label}: ${error instanceof Error ? error.message : String(error)}`,
     });
   }
-}
-async function runJson(argv: readonly [string, ...string[]]): Promise<unknown> {
-  const result = await run(argv);
-  if (result.code !== 0)
-    throw new WatcherQueryError({
-      kind: "command-exit",
-      retryable: true,
-      code: result.code,
-      detail:
-        firstLine(result.stderr) || `${argv.join(" ")} exited ${result.code}`,
-    });
-  return parseJson(result.stdout, argv.join(" "));
 }
 function raw(value: unknown): string {
   try {
@@ -281,8 +272,7 @@ export function mapRollupNode(value: unknown): T.Check | null {
   const link =
     typeof object.targetUrl === "string" ? object.targetUrl : details.link;
   if (typename === "CheckRun") {
-    const status =
-      typeof object.status === "string" ? object.status.toUpperCase() : "";
+    const status = enumValue(object.status, ["COMPLETED", "IN_PROGRESS", "PENDING", "QUEUED", "REQUESTED", "WAITING"], "check run.status");
     const conclusion =
       typeof object.conclusion === "string"
         ? object.conclusion.toUpperCase()
@@ -451,15 +441,23 @@ function graphqlArgs(
 }
 
 export class GhGitHubReader implements T.GitHubReader {
+  private readonly signal?: AbortSignal;
+  constructor(signal?: AbortSignal) { this.signal = signal; }
+  private run(argv: readonly [string, ...string[]]) { return run(argv, this.signal); }
+  private async runJson(argv: readonly [string, ...string[]]): Promise<unknown> {
+    const result = await this.run(argv);
+    if (result.code !== 0) throw new WatcherQueryError({ kind: "command-exit", retryable: true, code: result.code, detail: firstLine(result.stderr) || `command exited ${result.code}` });
+    return parseJson(result.stdout, argv.join(" "));
+  }
   async originRepo(): Promise<T.Repository | null> {
-    const result = await run(["git", "remote", "get-url", "origin"]);
+    const result = await this.run(["git", "remote", "get-url", "origin"]);
     return result.code === 0 ? parseRemote(result.stdout) : null;
   }
   async currentPr(pr: T.PrNumber | null): Promise<T.PrContext> {
     const argv: [string, ...string[]] = ["gh", "pr", "view"];
     if (pr !== null) argv.push(String(pr));
     argv.push("--json", "number,url");
-    const object = record(await runJson(argv), "current PR");
+    const object = record(await this.runJson(argv), "current PR");
     const parsed = parsePrUrl(string(object.url, "current PR.url"));
     return {
       ...parsed,
@@ -468,7 +466,7 @@ export class GhGitHubReader implements T.GitHubReader {
   }
   async pullRequest(context: T.PrContext): Promise<T.PullRequestFacts> {
     return parsePullRequest(
-      await runJson([
+      await this.runJson([
         "gh",
         "pr",
         "view",
@@ -484,7 +482,7 @@ export class GhGitHubReader implements T.GitHubReader {
   async openPullRequests(
     repository: T.Repository
   ): Promise<readonly T.OpenPullRequest[]> {
-    const value = await runJson([
+    const value = await this.runJson([
       "gh",
       "pr",
       "list",
@@ -497,6 +495,7 @@ export class GhGitHubReader implements T.GitHubReader {
       "--json",
       "number,headRefName,baseRefName",
     ]);
+    if (list(value, "open PRs").length >= 300) missing("open PR list truncated; use --stack-prs");
     return list(value, "open PRs").map((item, index) => {
       const object = record(item, `open PRs[${index}]`);
       return {
@@ -513,7 +512,7 @@ export class GhGitHubReader implements T.GitHubReader {
     });
   }
   async checksFastPath(context: T.PrContext): Promise<T.ChecksFastPath> {
-    const result = await run([
+    const result = await this.run([
       "gh",
       "pr",
       "checks",
@@ -540,25 +539,28 @@ export class GhGitHubReader implements T.GitHubReader {
   ): Promise<T.RollupPage> {
     const argv = graphqlArgs(PR_CHECK_ROLLUP_QUERY, context);
     if (after !== null) argv.push("-f", `after=${after}`);
-    const value = await runJson(argv);
+    const value = await this.runJson(argv);
     const commits = list(
       at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
       "commits.nodes"
     );
-    if (commits.length === 0) return { checks: [], endCursor: null };
+    if (commits.length === 0) return { headRefOid: null, checks: [], endCursor: null };
     const commit = record(
       at(commits[commits.length - 1], ["commit"]),
       "commit"
     );
+    const headRefOid = string(commit.oid, "commit.oid");
     if (commit.statusCheckRollup === null)
-      return { checks: [], endCursor: null };
+      return { headRefOid, checks: [], endCursor: null };
     const contexts = record(
       at(commit, ["statusCheckRollup", "contexts"]),
       "contexts"
     );
-    const checks = list(contexts.nodes, "contexts.nodes")
-      .map(mapRollupNode)
-      .filter((check): check is T.Check => check !== null);
+    const checks = list(contexts.nodes, "contexts.nodes").map(node => {
+      const check = mapRollupNode(node);
+      if (check === null) missing("unknown check rollup context", node);
+      return check;
+    });
     const page = record(contexts.pageInfo, "contexts.pageInfo");
     if (typeof page.hasNextPage !== "boolean")
       missing("contexts.pageInfo.hasNextPage", page.hasNextPage);
@@ -566,19 +568,20 @@ export class GhGitHubReader implements T.GitHubReader {
       page.endCursor,
       "contexts.pageInfo.endCursor"
     );
-    return { checks, endCursor: page.hasNextPage && cursor ? cursor : null };
+    if (page.hasNextPage && !cursor) missing("contexts.pageInfo.endCursor for next page");
+    return { headRefOid, checks, endCursor: page.hasNextPage ? cursor : null };
   }
   async reviewThreads(
     context: T.PrContext
   ): Promise<readonly T.ReviewThread[]> {
     return parseReviewThreads(
-      await runJson(graphqlArgs(REVIEW_THREADS_QUERY, context))
+      await this.runJson(graphqlArgs(REVIEW_THREADS_QUERY, context))
     );
   }
   async commitRollups(
     context: T.PrContext
   ): Promise<readonly T.CommitRollup[]> {
-    const value = await runJson(graphqlArgs(PR_COMMIT_STATUS_QUERY, context));
+    const value = await this.runJson(graphqlArgs(PR_COMMIT_STATUS_QUERY, context));
     const commits = list(
       at(value, ["data", "repository", "pullRequest", "commits", "nodes"]),
       "commits.nodes"
@@ -603,17 +606,23 @@ export class GhGitHubReader implements T.GitHubReader {
 
 export async function resolveChecks(
   reader: T.GitHubReader,
-  context: T.PrContext
+  context: T.PrContext,
+  expectedHead?: string
 ): Promise<T.CheckRead> {
-  const fast = await reader.checksFastPath(context);
+  // gh pr checks is deduplicated and does not bind its rows to a commit OID.
+  const fast = expectedHead === undefined ? await reader.checksFastPath(context) : { kind: "checks" as const, checks: [] };
   const direct = fast.kind === "checks" ? nonEmpty(fast.checks) : null;
   if (direct !== null) return { source: "gh-pr-checks", checks: direct };
   const checks: T.Check[] = [];
   let after: string | null = null;
+  const cursors = new Set<string>();
   do {
     const page = await reader.checkRollupPage(context, after);
+    if (expectedHead !== undefined && page.headRefOid !== expectedHead) throw new ChecksUnavailable("Check rollup page does not match the current head");
     checks.push(...page.checks);
     after = page.endCursor;
+    if (after !== null && cursors.has(after)) throw new ChecksUnavailable("Check rollup pagination repeated a cursor");
+    if (after !== null) cursors.add(after);
   } while (after !== null);
   const fallback = nonEmpty(checks);
   if (fallback !== null) return { source: "graphql-rollup", checks: fallback };
@@ -651,6 +660,8 @@ export function orderStack(
   context: T.PrContext,
   open: readonly T.OpenPullRequest[]
 ): T.NonEmpty<T.PrContext> {
+  if (new Set(open.map(pr => pr.number)).size !== open.length || new Set(open.map(pr => pr.headRefName)).size !== open.length)
+    missing("ambiguous duplicate open PR/head");
   const byNumber = new Map(open.map((pr) => [pr.number, pr]));
   const byHead = new Map(open.map((pr) => [pr.headRefName, pr]));
   const children = new Map<string, T.OpenPullRequest[]>();
@@ -659,21 +670,26 @@ export function orderStack(
   for (const values of children.values())
     values.sort((a, b) => a.number - b.number);
   const start = byNumber.get(context.number);
-  if (start === undefined) return [context];
+  if (start === undefined) missing("seed missing from open stack; use frozen --stack-prs");
   const down: T.OpenPullRequest[] = [];
   let current = start;
+  const ancestors = new Set([start.number]);
   while (byHead.has(current.baseRefName)) {
     const parent = byHead.get(current.baseRefName);
     if (parent === undefined) break;
+    if (ancestors.has(parent.number)) missing("cyclic stack");
+    ancestors.add(parent.number);
     down.push(parent);
     current = parent;
   }
+  if ([...down, start].some(pr => (children.get(pr.headRefName)?.length ?? 0) > 1)) missing("ambiguous branching stack; use frozen --stack-prs");
   const seen = new Set<T.PrNumber>([
     ...down.map((pr) => pr.number),
     start.number,
   ]);
   const up: T.OpenPullRequest[] = [];
   const visit = (parent: T.OpenPullRequest): void => {
+    if ((children.get(parent.headRefName)?.length ?? 0) > 1) missing("ambiguous branching stack; use frozen --stack-prs");
     for (const child of children.get(parent.headRefName) ?? []) {
       if (seen.has(child.number)) continue;
       seen.add(child.number);

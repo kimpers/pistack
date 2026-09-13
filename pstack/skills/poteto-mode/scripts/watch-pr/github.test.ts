@@ -38,8 +38,8 @@ describe("checks fallback chain", () => {
     const reader = fakeReader({
       fastPath: { kind: "unusable", exitCode: 8, stderr: "" },
       rollupPages: [
-        { checks: [passingCheck("first")], endCursor: "next" },
-        { checks: [failedCheck("second")], endCursor: null },
+        { headRefOid: "head", checks: [passingCheck("first")], endCursor: "next" },
+        { headRefOid: "head", checks: [failedCheck("second")], endCursor: null },
       ],
     });
     const read = await resolveChecks(reader, context);
@@ -55,7 +55,7 @@ describe("checks fallback chain", () => {
   it("falls back when valid fast-path JSON represented an empty list", async () => {
     const reader = fakeReader({
       fastPath: { kind: "checks", checks: [] },
-      rollupPages: [{ checks: [pendingCheck("fallback")], endCursor: null }],
+      rollupPages: [{ headRefOid: "head", checks: [pendingCheck("fallback")], endCursor: null }],
     });
     expect((await resolveChecks(reader, context)).checks[0].name).toBe(
       "fallback"

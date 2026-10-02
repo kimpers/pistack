@@ -33,10 +33,11 @@ Use a task-local JSON profile, not a new personal settings file. Its source sche
 | `models` | Complete effective `pistack.json` ModelConfig object from setup |
 | `available` | Array of current discovered `provider/model-id` strings |
 | `parent` | Object with the current discovered `provider` and `id` |
+| `support` | Required for explicit approved effort: current `pistack_models` support rows (`provider`, `id`, `reasoning`, sparse `thinkingLevelMap`); omit only when no explicit effort needs validation |
 | `surface` | `visual`, `cli` or `api` |
 | `continuation` | `manual` or explicitly authorized `pi-goal` |
 
-`swarm workers` resolves explicit `inherit` through the selected parent. Discovery is not authentication/launch proof. Visual review requires screenshots/video/operator review; CLI/API review requires operator/evidence. A mixed-surface plan uses `visual` when any changed interaction needs visual review and names scenarios/artifacts for both surfaces. Its CLI/API lanes may still save logs; the shared review gate requires visual evidence.
+`swarm workers` resolves explicit `inherit` through the selected parent. The marker records dispatch selectors and reasoning budget; registry identities remain separate. Obtain `available`, `parent` and `support` from fresh `pistack_models` resolution of that role. The checker consumes this task-local snapshot, not a live registry: call `pistack_models` again immediately before dispatch and use its `runs[].selector` as each native child's `model`. Changed unsupported effort blocks; neither checker nor resolver silently downgrades. Discovery is not authentication/launch proof. Visual review requires screenshots/video/operator review; CLI/API review requires operator/evidence. A mixed-surface plan uses `visual` when any changed interaction needs visual review and names scenarios/artifacts for both surfaces. Its CLI/API lanes may still save logs; the shared review gate requires visual evidence.
 
 Coverage defaults to ten live scenarios, separately from configured concurrency and role panel cardinality. Optional `scenarios` (1–100) differing from ten requires `coverageApproval` naming the explicit user approval evidence; copy that evidence reference into Program checklist. These are declared references for review, not automatic consent verification. Same-model lanes are disclosed in the required live marker. Every scenario needs a saved artifact and pass predicate, including a regression lane against trunk. CLI/API artifacts can be logs; visual artifacts must show the interaction.
 

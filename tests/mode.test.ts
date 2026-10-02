@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { SessionManager, createEventBus } from "@earendil-works/pi-coding-agent";
 import pistack, { pingSubagents } from "../pi/extensions/pistack.ts";
 import { STATE_TYPE, emptyState, restoreState, updateChecklist } from "../pi/lib/session-state.ts";
+import { defaultModels } from "../pi/lib/models.ts";
 import { dependencyManifest, configPath } from "../pi/lib/setup.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { fixture } from "./fixtures.ts";
@@ -79,6 +80,74 @@ test("user-callable native setup flow can decline, cancel a picker, or approve a
     assert.match(h.messages.join("\n"), /UNKNOWN/);
   } finally { f.cleanup(); }
 });
+test("native setup budget dialogs disclose downgrade/retirement, decline safely, and public resolution rejects drift", async () => {
+  const f = fixture(); try {
+    const core = dependencyManifest.extensions.filter(d => d.required);
+    for (const d of core) f.pkg(join(f.paths.agentDir, "npm/node_modules", d.name), d.name, d.version);
+    f.settings("user", { packages: core.map(d => `npm:${d.name}@${d.version}`) });
+    const models = defaultModels(); models.roles["bug-fix"] = ["fixture/reasoning"];
+    models.roles["arena runners"] = Array(4).fill("inherit"); models.roles["how critics"] = ["retired/id"];
+    f.write(configPath(f.paths, "user"), { version: 1, models, optional: [], helpers: false });
+    const before = readFileSync(configPath(f.paths, "user"), "utf8");
+    const h = harness(f); let supported = true, approve = false; const summaries: string[] = [];
+    h.ctx.modelRegistry.getAvailable = () => [h.ctx.model, { provider: "fixture", id: "reasoning", reasoning: true, thinkingLevelMap: { xhigh: null, high: supported ? "high" : null } }];
+    await h.command("on");
+    assert.doesNotMatch((await h.emit("before_agent_start", { systemPrompt: "BASE" })).systemPrompt, /"how critics"/);
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    h.ctx.ui.select = async (title: string, choices: string[]) => title.startsWith("Reasoning budget") ? "large" : choices[0];
+    h.ctx.ui.confirm = async (_title: string, summary: string) => { summaries.push(summary); return approve; };
+    await h.command("setup");
+    assert.equal(summaries.length, 1); assert.match(summaries[0], /target xhigh, proposed high/); assert.match(summaries[0], /Remove retired role.*how critics/);
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    approve = true; await h.command("setup");
+    const saved = JSON.parse(readFileSync(configPath(f.paths, "user"), "utf8"));
+    assert.equal(saved.models.thinking["fixture/reasoning"], "high"); assert.equal(saved.models.roles["arena runners"].length, 4);
+    assert.equal(saved.models.roles["how critics"], undefined);
+    const approvedBytes = readFileSync(configPath(f.paths, "user"), "utf8");
+    await h.command("setup");
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), approvedBytes, "approved budget rerun is idempotent");
+    const tool = h.tools.get("pistack_models"); assert.ok(tool);
+    const resolved = await tool.execute("r", { role: "bug-fix" }, undefined, undefined, h.ctx);
+    assert.equal(resolved.details.runs[0].selector, "fixture/reasoning:high");
+    supported = false;
+    await assert.rejects(tool.execute("r", { role: "bug-fix" }, undefined, undefined, h.ctx), /Unsupported/);
+    const savedBytes = readFileSync(configPath(f.paths, "user"), "utf8");
+    await h.command("doctor"); assert.match(h.messages.join("\n"), /Unsupported/);
+    await h.emit("session_start", { reason: "reload" });
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), savedBytes);
+  } finally { f.cleanup(); }
+});
+
+for (const boundary of ["budget cancel", "final cancel", "capability drift", "unsupported model"]) {
+  test(`native setup ${boundary} preserves saved policy and never changes parent thinking`, async () => {
+    const f = fixture(); try {
+      const core = dependencyManifest.extensions.filter(d => d.required);
+      for (const d of core) f.pkg(join(f.paths.agentDir, "npm/node_modules", d.name), d.name, d.version);
+      f.settings("user", { packages: core.map(d => `npm:${d.name}@${d.version}`) });
+      const models = defaultModels(); models.roles["bug-fix"] = ["fixture/reasoning"];
+      f.write(configPath(f.paths, "user"), { version: 1, models, optional: [], helpers: false });
+      const before = readFileSync(configPath(f.paths, "user"), "utf8"), h = harness(f);
+      let supported = boundary !== "unsupported model", confirmations = 0;
+      h.ctx.thinkingLevel = "low";
+      h.ctx.modelRegistry.getAvailable = () => [h.ctx.model, { provider: "fixture", id: "reasoning", reasoning: supported }];
+      h.ctx.ui.select = async (title: string, choices: string[]) => title.startsWith("Reasoning budget") ? (boundary === "budget cancel" ? undefined : "medium") : choices[0];
+      h.ctx.ui.confirm = async () => {
+        confirmations++;
+        if (boundary === "capability drift") supported = false;
+        if (boundary === "final cancel") await h.command("setup cancel");
+        return true;
+      };
+      await h.command("setup");
+      assert.equal(confirmations, boundary === "budget cancel" || boundary === "unsupported model" ? 0 : 1);
+      assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+      assert.equal(existsSync(join(f.paths.agentDir, "pistack-setup.json")), false);
+      assert.equal(h.ctx.thinkingLevel, "low");
+      if (boundary === "capability drift") assert.match(h.messages.join("\n"), /Unsupported/);
+      if (boundary === "unsupported model") assert.match(h.messages.join("\n"), /no known supported reasoning/);
+    } finally { f.cleanup(); }
+  });
+}
+
 test("doctor verification is consent-only; actual normal transcript results are authoritative, never a persisted ready flag", async () => {
   const f = fixture(); try {
     const h = harness(f);

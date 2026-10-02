@@ -34,7 +34,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ### Arm the program
 
-- [ ] State the protocol and this plan to the operator, then stop. Start execution only on her explicit go.
+- [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
 - [ ] <Copy the selected profile continuation marker. Manual continuation only. No goal or scheduler. For an explicitly authorized pi-goal profile instead state that pi-goal is the sole continuation owner, cite continuationApproval, and name the objective, budget and stop conditions.>
 - [ ] Use native completion notifications for workers. <Cite coverageApproval here if scenario count differs from ten.>
 - [ ] At each work handoff, send the operator a status message with the PR, owner, state, head SHA, completed verdicts, open operator gates, and blockers. This does not arm periodic continuation.
@@ -45,7 +45,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] `<resolved package>/pstack/skills/poteto-mode/playbooks/opening-a-pr.md`
   - [ ] `<resolved package>/pstack/skills/<each other leaf skill the program uses>`
 - [ ] <Autonomous profile only. If authorized, use one owned finite monitored audit wait or event source under the Pi runtime contract, not another scheduler. Stop it on pause. Manual profiles omit this box and the tick prompt below.>
-- [ ] Use this tick prompt, verbatim. "Re-read the packaged Pi execution playbook and the current goal status. Audit the operation against both and fix drift in this tick. Probe every active lane and judge progress by side effects only. Checkpoint and interrupt/stop an owned stuck lane, confirm settlement and preserve its partial diff before any same-protocol replacement. Then send the operator a status message, whether or not anything changed, with the queue table of PR, owner, state, and head SHA, the verdicts since the last tick, what merged, open operator gates, and blockers."
+- [ ] Use this tick prompt, verbatim. "Re-read the packaged Pi execution playbook and the current goal status. Audit the operation against both and fix drift in this tick. Probe every active lane using exact native status and output; read-only work need not have side effects. Checkpoint and interrupt/stop an owned stuck lane, confirm settlement and preserve its partial diff before any same-protocol replacement. Post a short status message only for tracked changes not reported earlier, such as a PR opened, code-ready head, round launched or closed, verdict, merge, stuck-run action, blocker added or cleared, or operator decision. Name those changes only. Do not repeat unchanged tables or blockers. With no change, omit routine reply text, but never suppress a required blocker or approval response. Always append the tick to the decision trail with reported items or none."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
 
 ### Spawn owners
@@ -64,12 +64,12 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Run the repo's lint and typecheck once before the PR-facing push. Push with hooks on.
 - [ ] Run `/skill:deslop` before each commit and `/skill:no-comments` before review.
 - [ ] Triage every Bugbot and security-reviewer comment per `<resolved package>/pstack/skills/poteto-mode/references/bugbot-triage.md`.
-- [ ] Rebase onto current trunk before babysit and again before the merge-ready report.
+- [ ] Rebase onto current trunk before the code-ready report and babysit. Keep that merge base in fix rounds. Rebase again only at merge prep, on a `git merge-tree` conflict with trunk, or on a CI failure that comes from a change on trunk.
 
 ### Verdict and merge, for every PR
 
-- [ ] At the merge-ready head SHA, run the swarm per `pstack/skills/swarm/SKILL.md`. One gates lane. The approved live scenarios from the PR's **Verify, live** block (default ten; concurrency is separate). The perf lane from its **Verify, perf** block. One audit lane that reads the diff and the receipts and distrusts the PR body.
-- [ ] Clean only when every lane is `PASS`. Findings go back to the owner. A new head gets a fresh swarm and a fresh verdict.
+- [ ] At the code-ready head SHA and at each later push that changes the patch, run the swarm per `pstack/skills/swarm/SKILL.md`. One gates lane. The approved live scenarios from the PR's **Verify, live** block (default ten; concurrency is separate). The perf lane from its **Verify, perf** block. Two or more audit lanes, each with its own focus, that read the diff and the receipts and distrust the PR body. The root audits the receipts in the merge-ready report before the verdict.
+- [ ] Clean only when every lane is `PASS`. Findings go back to the owner, including a defect that a lane filed as a note. A new head gets a fresh swarm and a fresh verdict, except for results that stay valid under the patch-id rule in `playbooks/shipping.md`.
 - [ ] <The merge or append rule from the execution playbook, with the patch-id rule from `playbooks/shipping.md`.>
 
 ### Boot recipe, for every live lane

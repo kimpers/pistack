@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getAgentDir, VERSION, BorderedLoader, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
-import { availableModelIds, roleDefaults, validateAvailable, type Role } from "../lib/models.ts";
+import { availableModelIds, budgets, modelId, proposeBudget, resolveRole, retireModelRoles, roleDefaults, validateModelPolicy, type Budget, type Role } from "../lib/models.ts";
 import { applyProposal, buildProposal, dependencyManifest, formatProposal, helperStatus, inspectSetup, inspectPrerequisites, loadConfig, type SetupPaths } from "../lib/setup.ts";
 import { emptyState, formatState, restoreState, STATE_TYPE, updateChecklist, type ChecklistAction, type ModeState } from "../lib/session-state.ts";
 
@@ -18,6 +18,12 @@ export default function pistack(pi: ExtensionAPI) {
   let setupController: AbortController | undefined;
   let alive = true;
   const paths = (ctx: ExtensionContext): SetupPaths => ({ cwd: ctx.cwd, agentDir: getAgentDir(), projectTrusted: ctx.isProjectTrusted() });
+  const discoverModels = (ctx: ExtensionContext) => {
+    const registry = ctx.modelRegistry.getAvailable();
+    const available = availableModelIds(registry, ctx.scopedModels);
+    const support = registry.filter(model => available.includes(modelId(model))).map(({ provider, id, reasoning, thinkingLevelMap }) => ({ provider, id, reasoning, thinkingLevelMap }));
+    return { available, support };
+  };
   const report = (ctx: ExtensionContext, text: string, level: "info" | "warning" | "error" = "info") => {
     if (!alive) return;
     if (ctx.hasUI) ctx.ui.notify(text, level);
@@ -46,7 +52,7 @@ export default function pistack(pi: ExtensionAPI) {
     restore(ctx);
     if (!state.enabled) return;
     const config = loadConfig(paths(ctx)).config;
-    return { systemPrompt: `${event.systemPrompt}\n\n${readFileSync(guidePath, "utf8")}\n\nCurrent piStack branch checklist:\n${formatState(state)}\nModel policy (validate discovered availability before every launch; do not override pi-subagents user/project safety policy):\n${JSON.stringify(config.models)}\nIntegration reference: ${guidePath}` };
+    return { systemPrompt: `${event.systemPrompt}\n\n${readFileSync(guidePath, "utf8")}\n\nCurrent piStack branch checklist:\n${formatState(state)}\nModel policy (call pistack_models for the role immediately before every launch; pass runs[].selector as subagent model, never a dispatch thinking field; do not override pi-subagents user/project safety policy):\n${JSON.stringify(retireModelRoles(config.models))}\nIntegration reference: ${guidePath}` };
   });
   pi.registerTool({
     name: "pistack_checklist", label: "piStack checklist",
@@ -88,6 +94,19 @@ export default function pistack(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerTool({
+    name: "pistack_models", label: "piStack role models",
+    description: "Read-only fresh role resolution from trusted effective piStack config and scoped model registry. Before each delegation use runs[].selector as subagent model (provider/id:level when approved); runs[].model is the separate registry identity. Does not launch or prove authentication; native agent/model-scope/thinking ceilings still apply. No dispatch thinking field.",
+    parameters: Type.Object({ role: StringEnum(Object.keys(roleDefaults) as Role[]) }),
+    async execute(_id, params, signal, _update, ctx) {
+      signal?.throwIfAborted();
+      const effective = loadConfig(paths(ctx));
+      const { available, support } = discoverModels(ctx);
+      const result = { ...resolveRole(effective.config.models, params.role, available, ctx.model, support), configPath: effective.path, available, support, parent: ctx.model && { provider: ctx.model.provider, id: ctx.model.id } };
+      return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
+    },
+  });
+
   async function doctor(ctx: ExtensionCommandContext) {
     const currentPaths = paths(ctx);
     const tools = pi.getAllTools();
@@ -104,8 +123,13 @@ export default function pistack(pi: ExtensionAPI) {
     }
     for (const prerequisite of await inspectPrerequisites(currentPaths, inspection.config)) lines.push(`${prerequisite.name}: ${prerequisite.ready ? "available" : "NOT READY"} ${prerequisite.detail}`);
     lines.push(helperStatus().reason);
-    const models = availableModelIds(ctx.modelRegistry.getAvailable(), ctx.scopedModels);
-    lines.push(`Discovered scoped models: ${models.join(", ") || "none"}`, ...validateAvailable(inspection.config.models, models, ctx.model));
+    const { available, support } = discoverModels(ctx);
+    lines.push(`Discovered scoped models: ${available.join(", ") || "none"}`, `Reasoning budget: ${inspection.config.models.budget ?? "unlimited"} (effort policy, not spend/token allowance)`, ...validateModelPolicy(inspection.config.models, available, ctx.model, support));
+    if (inspection.config.models.roles["how critics"]) lines.push("Retired role how critics is inactive; removal requires explicit /pistack setup approval. No reload-time migration.");
+    for (const role of Object.keys(roleDefaults) as Role[]) {
+      try { lines.push(`${role}: ${resolveRole(inspection.config.models, role, available, ctx.model, support).runs.map(run => `${run.selector} (${run.policy})`).join(", ")}`); }
+      catch { /* The validation errors above are the actionable diagnosis. */ }
+    }
     const ping = await pingSubagents(pi, ctx.sessionManager.getSessionId());
     lines.push(`Subagent owner RPC: ${ping}`, "Packaged agent effective definitions/child launch/auth: UNKNOWN. /pistack doctor verify offers public agent-list capabilities and doctor results without launching workers. List is not launch proof.", "MCP connectors/auth, search provider, browser runtime/recording, real PTY/app proof: not proven by installation or tool registration.");
     report(ctx, lines.join("\n"));
@@ -130,14 +154,21 @@ export default function pistack(pi: ExtensionAPI) {
       const helpers = await ctx.ui.select("Retained Bun helpers: required for PR watcher/orchestration; may write package directory", config.helpers ? ["Select", "Do not select (workflows unavailable)"] : ["Do not select (workflows unavailable)", "Select"], { signal: controller.signal });
       if (!helpers) return;
       config.helpers = helpers === "Select";
-      const available = availableModelIds(ctx.modelRegistry.getAvailable(), ctx.scopedModels);
+      const budget = await ctx.ui.select("Reasoning budget: unlimited preserves existing/native effort; large=xhigh, medium=high, small=medium. Not spend/token allowance. Inherit keeps native parent/agent behavior.", [config.models.budget ?? "unlimited", ...budgets.filter(b => b !== (config.models.budget ?? "unlimited"))], { signal: controller.signal }) as Budget | undefined;
+      if (!budget) return;
+      const { available } = discoverModels(ctx);
+      let modelChanges: string[] = [];
       report(ctx, `Discovered scoped provider/model IDs:\n${available.join("\n") || "none"}\ninherit explicitly selects the parent. Repeated panel entries still count as independent contexts, not model diversity.`);
       for (;;) {
         const role = await ctx.ui.select("Models: select role to edit, or review proposal", ["Review proposal", "Concurrency", ...Object.keys(roleDefaults).map(role => `${role} = ${config.models.roles[role as Role].join(", ")}`)], { signal: controller.signal });
         if (!role) return;
         if (role === "Review proposal") {
-          const errors = validateAvailable(config.models, available, ctx.model);
+          const fresh = discoverModels(ctx);
+          const proposed = proposeBudget(config.models, budget, fresh.support);
+          const errors = [...proposed.errors, ...validateModelPolicy(proposed.config, fresh.available, ctx.model, fresh.support)];
           if (errors.length) { report(ctx, `${errors.join("\n")}\nConfigure available models before setup. /login or model setup may be required.`, "error"); return; }
+          config.models = proposed.config;
+          modelChanges = [`Reasoning budget ${budget}: unlimited preserves existing/native effort; explicit large/medium/small targets xhigh/high/medium. Inherit keeps native parent/agent effort. No spend/token allowance or global/session thinking change.`, ...proposed.changes];
           break;
         }
         if (role === "Concurrency") {
@@ -163,12 +194,16 @@ export default function pistack(pi: ExtensionAPI) {
         config.models.roles[key] = choices;
       }
       const proposal = buildProposal(currentPaths, inspection, scope, config, pi.getAllTools());
+      proposal.modelChanges.push(...modelChanges);
       proposal.prerequisites = await inspectPrerequisites(currentPaths, config);
       proposal.conflicts.push(...proposal.prerequisites.filter(p => p.requiredForInstall && !p.ready).map(p => `Prerequisite ${p.name}: ${p.detail}`));
       const summary = formatProposal(proposal);
       if (proposal.conflicts.length) { report(ctx, summary, "error"); return; }
       if (!await ctx.ui.confirm("Approve this one piStack setup proposal?", summary, { signal: controller.signal })) { report(ctx, "Setup declined; no changes"); return; }
-      const install = () => applyProposal(currentPaths, proposal, { approved: true, signal: controller.signal, tools: pi.getAllTools() });
+      const install = () => applyProposal(currentPaths, proposal, { approved: true, signal: controller.signal, tools: pi.getAllTools(), validateModels: () => {
+        const fresh = discoverModels(ctx);
+        return validateModelPolicy(proposal.config.models, fresh.available, ctx.model, fresh.support);
+      } });
       const result = ctx.mode === "tui" ? await ctx.ui.custom<Awaited<ReturnType<typeof applyProposal>>>((tui, theme, _keys, done) => {
         const loader = new BorderedLoader(tui, theme, "piStack approved setup · Esc cancels; partial installs retained");
         loader.onAbort = () => controller.abort();

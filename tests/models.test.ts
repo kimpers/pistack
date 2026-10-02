@@ -7,12 +7,13 @@ import { fixture } from "./fixtures.ts";
 
 test("defaults explicitly inherit; panels preserve upstream cardinality independent from concurrency", () => {
   const config = defaultModels();
-  assert.equal(config.roles["how critics"].length, 4);
+  assert.equal(config.roles["arena runners"].length, 3);
+  config.roles["arena runners"] = Array(4).fill("inherit");
   const parent = { provider: "custom", id: "owner/model" };
-  const panel = resolveRole(config, "how critics", ["custom/owner/model"], parent);
+  const panel = resolveRole(config, "arena runners", ["custom/owner/model"], parent);
   assert.equal(panel.models.length, 4); assert.equal(panel.distinctModels, 1); assert.match(panel.diversity, /not multi-model/);
-  config.concurrency = 1; assert.equal(resolveRole(config, "how critics", ["custom/owner/model"], parent).models.length, 4);
-  assert.throws(() => resolveRole(config, "how critics", [], parent), /Unavailable/);
+  config.concurrency = 1; assert.equal(resolveRole(config, "arena runners", ["custom/owner/model"], parent).models.length, 4);
+  assert.throws(() => resolveRole(config, "arena runners", [], parent), /Unavailable/);
 });
 test("available model discovery respects session scopes and rejects unavailable configured IDs", () => {
   const a = { provider: "a", id: "model/one" }, b = { provider: "b", id: "two" };
@@ -32,4 +33,15 @@ test("real Pi ModelRegistry discovers an isolated custom provider catalog withou
     assert.ok(availableModelIds(registry.getAvailable()).includes("pistack-test/owner/fixture"));
     assert.equal(registry.find("pistack-test", "owner/fixture")?.id, "owner/fixture");
   } finally { f.cleanup(); }
+});
+
+test("legacy how critics profiles remain readable and preserve saved panel choices and unrelated fields", () => {
+  const config = defaultModels() as any;
+  config.roles["how critics"] = ["saved/retired"];
+  config.roles["arena runners"] = ["saved/a", "inherit", "saved/b", "saved/a", "inherit"];
+  config.operatorNote = { keep: true };
+  const parsed = parseModels(config) as any;
+  assert.deepEqual(parsed.roles["arena runners"], config.roles["arena runners"]);
+  assert.deepEqual(parsed.operatorNote, { keep: true });
+  assert.equal(Object.hasOwn(defaultModels().roles, "how critics"), false);
 });

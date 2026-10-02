@@ -1,12 +1,12 @@
 # piStack
 
-Pi-native [pstack](https://github.com/cursor/plugins/tree/93b00b89ef425a9c1bac0d0b317dfc49c930ac99/pstack/) engineering workflows for deliberate planning, implementation, review, and verification.
+Pi-native [pstack](https://github.com/cursor/plugins/tree/c47b12849e43f18d5c374c7069c744cc55b0ea00/pstack/) engineering workflows for deliberate planning, implementation, review, and verification.
 
 piStack brings pstack's skills and playbooks into Pi, with opt-in session guidance, persistent checklists, and packaged agents. It uses Pi's existing subagent, goal, and terminal extensions instead of adding another executor. Mode never starts workers or goals on its own.
 
 ## Install
 
-Use an existing Pi installation. The locally checked setup uses Pi 0.85.1 on macOS. Review package code before loading it.
+Use an existing Pi installation. Source and fixture checks use Pi 0.85.1 on macOS; the 0.15.5 refresh still needs parent installation smoke checks. Review package code before loading it.
 
 Install from Git:
 
@@ -42,6 +42,6 @@ See [Pi usage and setup details](pi/README.md) and [verification limits and upst
 
 ## Upstream and licenses
 
-Adapted from Lauren Tan's pstack 0.14.8 under the [MIT license](pstack/LICENSE). The attributed deslop skill retains [Cursor's MIT license](pstack/skills/deslop/LICENSE).
+Adapted from Lauren Tan's pstack 0.15.5 under the [MIT license](pstack/LICENSE). The attributed deslop skill retains [Cursor's MIT license](pstack/skills/deslop/LICENSE).
 
-The [original plugin catalog](https://github.com/cursor/plugins/tree/93b00b89ef425a9c1bac0d0b317dfc49c930ac99/) and Git ancestry remain available. Other catalog plugins are not bundled in piStack.
+The [original plugin catalog](https://github.com/cursor/plugins/tree/c47b12849e43f18d5c374c7069c744cc55b0ea00/) and Git ancestry remain available. Other catalog plugins are not bundled in piStack.

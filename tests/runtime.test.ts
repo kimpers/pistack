@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fixture } from "./fixtures.ts";
 import { resolveFrontier, type FrontierCommand } from "../pstack/skills/poteto-mode/scripts/orch/frontier.ts";
 import { openStore, NotFoundError } from "../pstack/skills/poteto-mode/scripts/orch/store.ts";
-import { defaultModels } from "../pi/lib/models.ts";
+import { defaultModels, proposeBudget } from "../pi/lib/models.ts";
 import { executionProfile } from "../pi/lib/execution-profile.ts";
 const scripts = "pstack/skills/poteto-mode/scripts";
 const sha = (n: number) => String(n).repeat(40);
@@ -90,6 +90,23 @@ test("actual plan checker accepts CLI evidence without goals/images and rejects 
     f.write(config, { ...p, continuation: "pi-goal", continuationApproval: "user-receipt#goal" });
     assert.equal(check(valid).status, 1);
     assert.equal(check(valid.replace("Manual continuation only. No goal or scheduler.", "pi-goal is the sole continuation owner. user-receipt#goal.")).status, 0);
+  } finally { f.cleanup(); }
+});
+
+test("execution profile and real checker retain approved model:level selectors and reject effort drift", () => {
+  const f = fixture(); try {
+    const p = profile(); p.models.roles["swarm workers"] = ["fixture/model"];
+    const support = [{ ...p.parent, reasoning: true }];
+    p.models = proposeBudget(p.models, "medium", support).config;
+    const snapshot = { ...p, support };
+    const e = executionProfile(snapshot);
+    assert.equal(e.runs[0].selector, "fixture/model:high"); assert.match(e.marker, /fixture\/model:high/);
+    const file = join(f.root, "budget-plan.md"), config = join(f.root, "budget-profile.json");
+    f.write(file, plan(snapshot)); f.write(config, snapshot);
+    const check = () => spawnSync(process.execPath, [join(scripts, "check-plan.mjs"), file, config], { encoding: "utf8" });
+    assert.equal(check().status, 0);
+    f.write(file, plan(snapshot).replace("fixture/model:high", "fixture/model:medium")); assert.equal(check().status, 1);
+    f.write(config, { ...snapshot, support: [{ ...p.parent, reasoning: false }] }); assert.equal(check().status, 2);
   } finally { f.cleanup(); }
 });
 

@@ -10,7 +10,7 @@
   },
   {
     "id": "review",
-    "task": "Plan a four-context review with one discovered model and concurrency two; preserve rubric/join/parent acceptance and disclose same-model panels.",
+    "task": "Resolve new three-context and saved four-context review panels with one discovered model and concurrency two; preserve rubric/join/parent acceptance and disclose same-model panels.",
     "file": "tests/workflows.test.ts",
     "pattern": "^delegation contracts",
     "minimumPasses": 1,

@@ -27,7 +27,7 @@ test("actual Pi loader exposes every selected direct skill, hides principle leav
     await loader.reload();
     const { skills, diagnostics } = loader.getSkills();
     assert.deepEqual(diagnostics, []);
-    assert.equal(skills.length, 46);
+    assert.equal(skills.length, 48);
     const catalog = new Map(skills.map(s => [s.name, s]));
     for (const path of entries) {
       const name = /\/([^/]+)\/SKILL.md$/.exec(path)![1];
@@ -37,7 +37,7 @@ test("actual Pi loader exposes every selected direct skill, hides principle leav
       assert.ok(body.includes(integration), `Direct ${name} loads shared policy without requiring mode`);
       assert.equal(skill.disableModelInvocation, !["setup-pstack", "deslop"].includes(name));
     }
-    assert.equal(skills.filter(s => s.name.startsWith("principle-")).length, 21);
+    assert.equal(skills.filter(s => s.name.startsWith("principle-")).length, 23);
     assert.ok(catalog.get("verify-fixture")!.filePath.includes(".pi/skills/verify-fixture"));
     for (const absent of ["make-bot-ui", "setup-benny", "triage-issue-reports", "pistack-foundation"]) assert.equal(catalog.has(absent), false);
   } finally { f.cleanup(); }
@@ -106,9 +106,9 @@ test("Bugbot prose paths resolve from the declared skill base, including generat
 });
 
 test("active instructions reject obsolete tool/model/cloud/path and unsafe cleanup recipes", () => {
-  const forbidden = /\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:/m;
+  const forbidden = /\/loop\b|\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:/m;
   for (const file of activeMarkdown) assert.doesNotMatch(read(file), forbidden, file);
-  for (const poison of ["`Task`", "environment: \"cloud\"", "git reset --hard", "paths: [x]", "~/.cursor/skills/x"]) assert.match(poison, forbidden);
+  for (const poison of ["`/loop`", "`Task`", "environment: \"cloud\"", "git reset --hard", "paths: [x]", "~/.cursor/skills/x"]) assert.match(poison, forbidden);
   assert.match(read("pi/references/integration.md"), /Explicit task limits and harness permissions override/);
   assert.match(read("pi/references/delegation.md"), /Never substitute a shell-agent, external CLI or foreground executor/);
 });
@@ -117,12 +117,12 @@ test("portable principle bodies and review rubrics are retained, with only appro
   const adapted = new Set(["principle-build-the-lever", "principle-encode-lessons-in-structure", "principle-never-block-on-the-human", "principle-sequence-verifiable-units"]);
   for (const entry of entries.filter(p => p.includes("/principle-"))) {
     const name = entry.split("/").at(-2)!; if (adapted.has(name)) continue;
-    const original = execFileSync("git", ["show", `93b00b89ef425a9c1bac0d0b317dfc49c930ac99:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
+    const original = execFileSync("git", ["show", `c47b12849e43f18d5c374c7069c744cc55b0ea00:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
     assert.equal(read(entry).replace(`\n\n${integration}\n`, ""), original, name);
   }
-  for (const path of ["how/references/critique-rubric.md", "interrogate/references/code-quality-review.md", "interrogate/references/lead-judgment.md", "why/references/epistemics.md", "typescript-best-practices/references/patterns.md"]) {
+  for (const path of ["interrogate/references/code-quality-review.md", "interrogate/references/lead-judgment.md", "why/references/epistemics.md", "typescript-best-practices/references/patterns.md"]) {
     const file = `pstack/skills/${path}`;
-    assert.equal(read(file), execFileSync("git", ["show", `HEAD:${file}`], { cwd: root, encoding: "utf8" }), file);
+    assert.equal(read(file), execFileSync("git", ["show", `c47b12849e43f18d5c374c7069c744cc55b0ea00:${file}`], { cwd: root, encoding: "utf8" }), file);
   }
   assert.match(read("pstack/skills/deslop/LICENSE"), /Copyright \(c\) 2026 Cursor/);
   assert.match(read("pstack/skills/deslop/SKILL.md"), /cursor-team-kit at `93b00b89/);

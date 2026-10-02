@@ -6,11 +6,81 @@ import { applyProposal, buildProposal, dependencyManifest, inspectSetup, sourceI
 import { fixture } from "./fixtures.ts";
 import { ProjectTrustStore } from "@earendil-works/pi-coding-agent";
 
+import { proposeBudget, resolveRole } from "../pi/lib/models.ts";
+
 const core = dependencyManifest.extensions.filter(d => d.required);
 function installCore(f: ReturnType<typeof fixture>) {
   for (const d of core) f.pkg(join(f.paths.agentDir, "npm/node_modules", d.name), d.name, d.version);
   f.settings("user", { packages: core.map(d => `npm:${d.name}@${d.version}`), theme: "unchanged", nested: { keep: true } });
 }
+test("setup retires how critics only in the approved proposal and preserves saved four-entry panels", async () => {
+  const f = fixture(); try {
+    installCore(f);
+    const config = (await inspectSetup(f.paths)).config;
+    config.models.roles["how critics"] = ["retired/unavailable"];
+    config.models.roles["arena runners"] = ["inherit", "inherit", "inherit", "inherit"];
+    (config.models as any).operatorNote = { keep: true };
+    f.write(configPath(f.paths, "user"), config);
+    const before = readFileSync(configPath(f.paths, "user"), "utf8");
+    const i = await inspectSetup(f.paths), p = buildProposal(f.paths, i, "user", i.config);
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    assert.match(formatProposal(p), /Remove retired role.*how critics/);
+    assert.equal(p.config.models.roles["how critics"], undefined);
+    await applyProposal(f.paths, p, { approved: false });
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    assert.equal((await applyProposal(f.paths, p, { approved: true })).error, undefined);
+    const saved = loadConfig(f.paths).config;
+    assert.equal(saved.models.roles["how critics"], undefined);
+    assert.deepEqual(saved.models.roles["arena runners"], config.models.roles["arena runners"]);
+    assert.deepEqual((saved.models as any).operatorNote, { keep: true });
+    const next = await inspectSetup(f.paths);
+    assert.equal((await applyProposal(f.paths, buildProposal(f.paths, next, "user", next.config), { approved: true })).changed, false);
+  } finally { f.cleanup(); }
+});
+
+test("setup rejects fresh reasoning capability drift after approval without config or journal writes", async () => {
+  const f = fixture(); try {
+    installCore(f);
+    const i = await inspectSetup(f.paths);
+    const model = { provider: "fixture", id: "reasoning", reasoning: true };
+    i.config.models.roles["bug-fix"] = ["fixture/reasoning"];
+    f.write(configPath(f.paths, "user"), i.config);
+    const fresh = await inspectSetup(f.paths);
+    const approved = proposeBudget(fresh.config.models, "medium", [model]).config;
+    const p = buildProposal(f.paths, fresh, "user", { ...fresh.config, models: approved });
+    const before = readFileSync(configPath(f.paths, "user"), "utf8");
+    const result = await applyProposal(f.paths, p, { approved: true, validateModels: () => {
+      try { resolveRole(p.config.models, "bug-fix", ["fixture/reasoning"], model, [{ ...model, thinkingLevelMap: { high: null } }]); return []; }
+      catch (error) { return [String(error)]; }
+    } });
+    assert.match(result.error!, /Unsupported/); assert.equal(result.changed, false);
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    assert.equal(existsSync(join(f.paths.agentDir, "pistack-setup.json")), false);
+  } finally { f.cleanup(); }
+});
+
+test("setup revalidates model policy at final save after dependency side effects", async () => {
+  const f = fixture(); try {
+    installCore(f);
+    const i = await inspectSetup(f.paths), dep = dependencyManifest.extensions.find(d => !d.required)!;
+    f.write(configPath(f.paths, "user"), i.config);
+    const before = readFileSync(configPath(f.paths, "user"), "utf8");
+    const fresh = await inspectSetup(f.paths);
+    const p = buildProposal(f.paths, fresh, "user", { ...fresh.config, optional: [dep.name] });
+    let drift = false;
+    const result = await applyProposal(f.paths, p, { approved: true, validateModels: () => drift ? ["Unsupported approved high after registry change"] : [], run: async (_command, args) => {
+      f.pkg(join(f.paths.agentDir, "npm/node_modules", dep.name), dep.name, dep.version);
+      const settings = JSON.parse(readFileSync(join(f.paths.agentDir, "settings.json"), "utf8"));
+      f.settings("user", { ...settings, packages: [...settings.packages, args[1]] });
+      drift = true; return { code: 0, stdout: "fixture only", stderr: "" };
+    } });
+    assert.match(result.error!, /Unsupported/); assert.equal(result.changed, true);
+    assert.deepEqual(result.completed, [dep.name]);
+    assert.equal(readFileSync(configPath(f.paths, "user"), "utf8"), before);
+    assert.equal(JSON.parse(readFileSync(join(f.paths.agentDir, "pistack-setup.json"), "utf8")).configState, "pending");
+  } finally { f.cleanup(); }
+});
+
 test("setup clean proposal, decline and cancellation never mutate real temporary settings", async () => {
   const f = fixture(); try {
     f.settings("user", { theme: "unchanged" });

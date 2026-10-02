@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { CONFIG_DIR_NAME, DefaultPackageManager, SettingsManager, type ResolvedResource, type ToolInfo } from "@earendil-works/pi-coding-agent";
-import { defaultModels, parseModels, type ModelConfig } from "./models.ts";
+import { defaultModels, parseModels, retireModelRoles, type ModelConfig } from "./models.ts";
 
 export interface Dependency { name: string; version: string; required: boolean; reason: string; repositories: string[]; tools: string[] }
 export const dependencyManifest = JSON.parse(readFileSync(new URL("../dependencies.json", import.meta.url), "utf8")) as { piVersion: string; qualification: string; extensions: Dependency[] };
@@ -14,7 +14,7 @@ export interface SetupConfig { version: 1; models: ModelConfig; optional: string
 export interface PackageRow { source: string; scope: "user" | "project" | "temporary"; identity: string; path?: string; name?: string; version?: string; shadowed: boolean; filter?: unknown; extensions: { path: string; enabled: boolean }[] }
 export interface Inspection { projectTrusted: boolean; rows: PackageRow[]; resources: ResolvedResource[]; problems: string[]; fingerprint: string; config: SetupConfig; configPath: string; settingsPaths: string[] }
 export type InstallStep = { name: string; command: string; args: string[]; cwd: string; reason: string } & ({ kind: "extension" } | { kind: "helpers"; fingerprint: string });
-export interface Proposal { scope: "user" | "project"; destination: { path: string; physicalParent: string; fingerprint: string | null }; inspection: Inspection; steps: InstallStep[]; conflicts: string[]; reuse: string[]; config: SetupConfig; prerequisites?: Prerequisite[] }
+export interface Proposal { scope: "user" | "project"; destination: { path: string; physicalParent: string; fingerprint: string | null }; inspection: Inspection; steps: InstallStep[]; conflicts: string[]; reuse: string[]; config: SetupConfig; modelChanges: string[]; prerequisites?: Prerequisite[] }
 export interface Prerequisite { name: string; ready: boolean; requiredForInstall: boolean; detail: string }
 export function jsonFile(path: string): Record<string, any> {
   if (!existsSync(path)) return {};
@@ -130,6 +130,8 @@ function assertHelperUnchanged(paths: SetupPaths, step: Extract<InstallStep, { k
   if (canonical(directory) !== step.cwd || helperStatus(directory).fingerprint !== step.fingerprint) throw new Error("Helper destination or package/lock changed since approval; rerun setup");
 }
 export function buildProposal(paths: SetupPaths, inspection: Inspection, scope: "user" | "project", config: SetupConfig, tools: readonly ToolInfo[] = []): Proposal {
+  const modelChanges = config.models.roles["how critics"] ? ["Remove retired role how critics (inactive; saved only after this approval). Other saved roles and panel counts are preserved."] : [];
+  config = { ...structuredClone(config), models: retireModelRoles(config.models) };
   const conflicts = [...inspection.problems];
   if (scope === "project" && !paths.projectTrusted) conflicts.push("Project is not trusted; setup cannot write project configuration");
   const steps: InstallStep[] = [];
@@ -166,10 +168,10 @@ export function buildProposal(paths: SetupPaths, inspection: Inspection, scope: 
       else steps.push({ kind: "helpers", name: "retained Bun helpers", command: "bun", args: ["install", "--frozen-lockfile"], cwd: canonical(directory), fingerprint: status.fingerprint, reason: "Required by retained PR watcher/orchestration workflows; writes dependencies and approved lock fingerprint to this package directory" });
     }
   }
-  return { scope, destination: snapshotDestination(paths, scope), inspection, steps, conflicts, reuse, config };
+  return { scope, destination: snapshotDestination(paths, scope), inspection, steps, conflicts, reuse, config, modelChanges };
 }
 export function formatProposal(proposal: Proposal): string {
-  return [dependencyManifest.qualification, `Scope: ${proposal.scope}`, `Project trust: ${proposal.inspection.projectTrusted ? "trusted" : "ignored"} for these commands only; saved trust is unchanged.`, `Effective profile before setup: ${proposal.inspection.configPath}. A trusted project profile retains precedence over user-scope writes.`, `Config: ${proposal.destination.path}`, `Approved physical config/journal parent (resolved through nearest existing ancestor): ${proposal.destination.physicalParent}`, ...proposal.reuse.map(r => `Reuse ${r}`), ...proposal.steps.map(s => `${s.command} ${s.args.map(a => JSON.stringify(a)).join(" ")}\n  cwd: ${s.cwd}${s.kind === "helpers" ? `\n  package/lock SHA-256: ${s.fingerprint}` : ""}\n  ${s.reason}`), ...proposal.conflicts.map(c => `CONFLICT: ${c}`), ...(proposal.prerequisites ?? []).map(p => `${p.name}: ${p.ready ? "available" : "NOT READY"} ${p.detail}`), `Models and capabilities to save:\n${JSON.stringify(proposal.config, null, 2)}`, "Approval permits the listed package manager commands, their dependency/lifecycle scripts, and piStack config/journal writes only. No browser/CLI downloads, upgrades, disabling/enabling resources, or shared extension removal. Esc/Cancel declines. Partial installs are retained and reported; rerun inspects unfinished work."].join("\n");
+  return [dependencyManifest.qualification, `Scope: ${proposal.scope}`, `Project trust: ${proposal.inspection.projectTrusted ? "trusted" : "ignored"} for these commands only; saved trust is unchanged.`, `Effective profile before setup: ${proposal.inspection.configPath}. A trusted project profile retains precedence over user-scope writes.`, `Config: ${proposal.destination.path}`, `Approved physical config/journal parent (resolved through nearest existing ancestor): ${proposal.destination.physicalParent}`, ...proposal.reuse.map(r => `Reuse ${r}`), ...proposal.steps.map(s => `${s.command} ${s.args.map(a => JSON.stringify(a)).join(" ")}\n  cwd: ${s.cwd}${s.kind === "helpers" ? `\n  package/lock SHA-256: ${s.fingerprint}` : ""}\n  ${s.reason}`), ...proposal.modelChanges, ...proposal.conflicts.map(c => `CONFLICT: ${c}`), ...(proposal.prerequisites ?? []).map(p => `${p.name}: ${p.ready ? "available" : "NOT READY"} ${p.detail}`), `Models and capabilities to save:\n${JSON.stringify(proposal.config, null, 2)}`, "Approval permits the listed package manager commands, their dependency/lifecycle scripts, and piStack config/journal writes only. No browser/CLI downloads, upgrades, disabling/enabling resources, or shared extension removal. Esc/Cancel declines. Partial installs are retained and reported; rerun inspects unfinished work."].join("\n");
 }
 export function atomicJsonOrText(path: string, text: string): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -212,11 +214,15 @@ export async function inspectPrerequisites(paths: SetupPaths, config: SetupConfi
     } catch (error) { return { name: probe.name, requiredForInstall: probe.requiredForInstall, ready: false, detail: String(error).slice(0, 500) }; }
   }));
 }
-export async function applyProposal(paths: SetupPaths, proposal: Proposal, options: { approved: boolean; signal?: AbortSignal; run?: RunCommand; tools?: readonly ToolInfo[] }): Promise<{ completed: string[]; remaining: string[]; error?: string; changed: boolean }> {
+export async function applyProposal(paths: SetupPaths, proposal: Proposal, options: { approved: boolean; signal?: AbortSignal; run?: RunCommand; tools?: readonly ToolInfo[]; validateModels?: () => string[] }): Promise<{ completed: string[]; remaining: string[]; error?: string; changed: boolean }> {
   const completed: string[] = [];
   const result = (error?: string, changed = false) => ({ completed, remaining: proposal.steps.filter(s => !completed.includes(s.name)).map(s => s.name), error, changed });
   if (!options.approved || options.signal?.aborted) return result("Cancelled; no changes");
   if (proposal.conflicts.length) return result(`Refused: ${proposal.conflicts.join("; ")}`);
+  const assertModelsCurrent = () => {
+    const errors = options.validateModels?.() ?? [];
+    if (errors.length) throw new Error(`Model policy changed or unavailable; rerun setup: ${errors.join("; ")}`);
+  };
   if ((await inspectSetup(paths, options.tools)).fingerprint !== proposal.inspection.fingerprint) return result("Settings/resources changed since approval; rerun setup");
   if (!destinationUnchanged(paths, proposal)) return result("Selected config destination changed since approval; rerun setup");
   const journalPath = join(proposal.destination.physicalParent, "pistack-setup.json");
@@ -229,6 +235,7 @@ export async function applyProposal(paths: SetupPaths, proposal: Proposal, optio
   };
   let changed = false;
   try {
+    assertModelsCurrent();
     for (const step of proposal.steps) if (step.kind === "helpers") assertHelperUnchanged(paths, step);
     for (const [index, step] of proposal.steps.entries()) {
       if (options.signal?.aborted) throw new Error("Cancelled; completed changes retained");
@@ -238,6 +245,7 @@ export async function applyProposal(paths: SetupPaths, proposal: Proposal, optio
       if (remaining.conflicts.length || !remaining.steps.some(s => s.name === step.name)) throw new Error(`Dependency state changed during setup; rerun: ${remaining.conflicts.join("; ") || step.name}`);
       if (!destinationUnchanged(paths, proposal)) throw new Error("Selected config destination changed during setup; configuration not overwritten");
       if (step.kind === "helpers") assertHelperUnchanged(paths, step);
+      assertModelsCurrent();
       journal.steps[index].state = "running";
       saveJournal(); changed = true;
       const commandResult = await (options.run ?? runCommand)(step.command, step.args, { cwd: step.cwd, agentDir: paths.agentDir, signal: options.signal });
@@ -256,6 +264,7 @@ export async function applyProposal(paths: SetupPaths, proposal: Proposal, optio
     if (options.signal?.aborted) throw new Error("Cancelled before config save");
     if (JSON.stringify(loadConfig(paths).config) !== JSON.stringify(proposal.inspection.config)) throw new Error("Model/capability settings changed during setup; configuration not overwritten");
     if (!destinationUnchanged(paths, proposal)) throw new Error("Selected config destination changed during setup; configuration not overwritten");
+    assertModelsCurrent();
     const path = join(proposal.destination.physicalParent, basename(proposal.destination.path));
     const previous = jsonFile(path);
     const text = JSON.stringify({ ...previous, ...proposal.config }, null, 2) + "\n";

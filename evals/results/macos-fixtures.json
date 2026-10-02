@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "observedAt": "2026-09-13T08:48:06.079Z",
+  "observedAt": "2026-10-02T09:36:16.937Z",
   "mode": "deterministic-fixtures-only",
   "releaseQualified": false,
   "environment": {
@@ -14,9 +14,9 @@
     "childBoundary": false
   },
   "source": {
-    "head": "93b00b89ef425a9c1bac0d0b317dfc49c930ac99",
+    "head": "2c852d3f2517b968625724197949448f79a27e99",
     "dirty": true,
-    "sha256": "e3ced9363fd1843d42e31137b68c8a742d877bfa2d3c05ce93d37a123b894813",
+    "sha256": "d50ee50d73fd9ce42e2f6437c870164d1722833a9eb75efcb2b6d72fc415053b",
     "fingerprintExcludes": [
       "node_modules",
       "helper install marker",
@@ -54,7 +54,7 @@
         "--test-name-pattern=^eval bug-fix fixture",
         "tests/evals.test.ts"
       ],
-      "latencyMs": 346.959,
+      "latencyMs": 317.409,
       "latencyScope": "wall-clock test subprocess including SDK load, not model/task latency",
       "exitCode": 0,
       "infrastructureError": null,
@@ -62,12 +62,12 @@
       "toolFailuresReason": "No live tool telemetry; asserted injected failures are fixture evidence, not measured live tool failure counts.",
       "modelRequests": 0,
       "tokenUse": null,
-      "stdout": "TAP version 13\n# Subtest: eval bug-fix fixture executes expected red then green without confusing red with acceptance\nok 1 - eval bug-fix fixture executes expected red then green without confusing red with acceptance\n  ---\n  duration_ms: 135.248042\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 273.546166\n",
+      "stdout": "TAP version 13\n# Subtest: eval bug-fix fixture executes expected red then green without confusing red with acceptance\nok 1 - eval bug-fix fixture executes expected red then green without confusing red with acceptance\n  ---\n  duration_ms: 123.293084\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 249.734708\n",
       "stderr": ""
     },
     {
       "id": "review",
-      "task": "Plan a four-context review with one discovered model and concurrency two; preserve rubric/join/parent acceptance and disclose same-model panels.",
+      "task": "Resolve new three-context and saved four-context review panels with one discovered model and concurrency two; preserve rubric/join/parent acceptance and disclose same-model panels.",
       "file": "tests/workflows.test.ts",
       "pattern": "^delegation contracts",
       "minimumPasses": 1,
@@ -91,7 +91,7 @@
         "--test-name-pattern=^delegation contracts",
         "tests/workflows.test.ts"
       ],
-      "latencyMs": 209.328,
+      "latencyMs": 199.267,
       "latencyScope": "wall-clock test subprocess including SDK load, not model/task latency",
       "exitCode": 0,
       "infrastructureError": null,
@@ -99,7 +99,7 @@
       "toolFailuresReason": "No live tool telemetry; asserted injected failures are fixture evidence, not measured live tool failure counts.",
       "modelRequests": 0,
       "tokenUse": null,
-      "stdout": "TAP version 13\n# Subtest: delegation contracts preserve panels, independent output, joins and failure/cancellation boundaries\nok 1 - delegation contracts preserve panels, independent output, joins and failure/cancellation boundaries\n  ---\n  duration_ms: 1.315041\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 137.218208\n",
+      "stdout": "TAP version 13\n# Subtest: delegation contracts preserve panels, independent output, joins and failure/cancellation boundaries\nok 1 - delegation contracts preserve panels, independent output, joins and failure/cancellation boundaries\n  ---\n  duration_ms: 1.637458\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 129.206541\n",
       "stderr": ""
     },
     {
@@ -128,7 +128,7 @@
         "--test-name-pattern=^verification and teaching",
         "tests/workflows.test.ts"
       ],
-      "latencyMs": 208.63,
+      "latencyMs": 199.393,
       "latencyScope": "wall-clock test subprocess including SDK load, not model/task latency",
       "exitCode": 0,
       "infrastructureError": null,
@@ -136,7 +136,7 @@
       "toolFailuresReason": "No live tool telemetry; asserted injected failures are fixture evidence, not measured live tool failure counts.",
       "modelRequests": 0,
       "tokenUse": null,
-      "stdout": "TAP version 13\n# Subtest: verification and teaching distinguish app execution from source, images and generated drafts\nok 1 - verification and teaching distinguish app execution from source, images and generated drafts\n  ---\n  duration_ms: 1.125291\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 135.526167\n",
+      "stdout": "TAP version 13\n# Subtest: verification and teaching distinguish app execution from source, images and generated drafts\nok 1 - verification and teaching distinguish app execution from source, images and generated drafts\n  ---\n  duration_ms: 1.138708\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 129.226125\n",
       "stderr": ""
     },
     {
@@ -165,7 +165,7 @@
         "--test-name-pattern=^pause/cancel|^native notifications",
         "tests/autonomy.test.ts"
       ],
-      "latencyMs": 229.091,
+      "latencyMs": 211.892,
       "latencyScope": "wall-clock test subprocess including SDK load, not model/task latency",
       "exitCode": 0,
       "infrastructureError": null,
@@ -173,7 +173,7 @@
       "toolFailuresReason": "No live tool telemetry; asserted injected failures are fixture evidence, not measured live tool failure counts.",
       "modelRequests": 0,
       "tokenUse": null,
-      "stdout": "TAP version 13\n# Subtest: pause/cancel aborts the owned watcher continuation without a fresh read or success\nok 1 - pause/cancel aborts the owned watcher continuation without a fresh read or success\n  ---\n  duration_ms: 4.619584\n  type: 'test'\n  ...\n# Subtest: native notifications remain the only child wakeup; pause guidance is not a second goal executor\nok 2 - native notifications remain the only child wakeup; pause guidance is not a second goal executor\n  ---\n  duration_ms: 0.566834\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 157.230042\n",
+      "stdout": "TAP version 13\n# Subtest: pause/cancel aborts the owned watcher continuation without a fresh read or success\nok 1 - pause/cancel aborts the owned watcher continuation without a fresh read or success\n  ---\n  duration_ms: 4.035041\n  type: 'test'\n  ...\n# Subtest: native notifications remain the only child wakeup; pause guidance is not a second goal executor\nok 2 - native notifications remain the only child wakeup; pause guidance is not a second goal executor\n  ---\n  duration_ms: 0.494\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 146.476958\n",
       "stderr": ""
     },
     {
@@ -202,7 +202,7 @@
         "--test-name-pattern=^history reflection destination|^history public tools",
         "tests/history.test.ts"
       ],
-      "latencyMs": 669.432,
+      "latencyMs": 619.397,
       "latencyScope": "wall-clock test subprocess including SDK load, not model/task latency",
       "exitCode": 0,
       "infrastructureError": null,
@@ -210,7 +210,7 @@
       "toolFailuresReason": "No live tool telemetry; asserted injected failures are fixture evidence, not measured live tool failure counts.",
       "modelRequests": 0,
       "tokenUse": null,
-      "stdout": "TAP version 13\n# Subtest: history reflection destination validates new/existing overrides and fork; rejects cache/traversal/symlink escapes without writing\nok 1 - history reflection destination validates new/existing overrides and fork; rejects cache/traversal/symlink escapes without writing\n  ---\n  duration_ms: 19.485208\n  type: 'test'\n  ...\n# Subtest: history public tools execute through registered extension definitions without enabling mode or writing sessions\nok 2 - history public tools execute through registered extension definitions without enabling mode or writing sessions\n  ---\n  duration_ms: 3.756542\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 597.486583\n",
+      "stdout": "TAP version 13\n# Subtest: history reflection destination validates new/existing overrides and fork; rejects cache/traversal/symlink escapes without writing\nok 1 - history reflection destination validates new/existing overrides and fork; rejects cache/traversal/symlink escapes without writing\n  ---\n  duration_ms: 17.920541\n  type: 'test'\n  ...\n# Subtest: history public tools execute through registered extension definitions without enabling mode or writing sessions\nok 2 - history public tools execute through registered extension definitions without enabling mode or writing sessions\n  ---\n  duration_ms: 3.5585\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 552.51375\n",
       "stderr": ""
     }
   ],

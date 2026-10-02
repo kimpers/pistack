@@ -30,7 +30,7 @@ Drop (implementation details that drift):
 - "we renamed `gpt-4` to `gpt-4o` in `encodingForModel`"
 
 Keep (durable patterns):
-- "closed regex enums for trigger detection are brittle; prefer schema-validated structures"
+- "closed regex enums for trigger detection are brittle. Prefer schema-validated structures"
 - "skill descriptions front-load trigger keywords (60/40 trigger-vs-action)"
 - "skill-bundled scripts run under bun with own lockfile, not pnpm workspace"
 - "hidden leaves need explicit routing; Pi ignores path-trigger metadata"

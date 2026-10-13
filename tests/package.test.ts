@@ -16,11 +16,11 @@ test("distribution allowlist retains attribution/references/scripts and excludes
     const paths = result[0].files.map((file: any) => file.path);
     for (const path of ["package.json", "pi/extensions/pistack.ts", "pi/agents/profiles/poteto-agent.md", "pstack/LICENSE", "pstack/skills/how/references/explorer-prompt.md", "pstack/skills/principle-attack-the-premise/SKILL.md", "pstack/skills/principle-test-behavior-not-implementation/SKILL.md", "pstack/skills/poteto-mode/scripts/bootstrap.ts", "pstack/skills/poteto-mode/scripts/bun.lock", "pstack/skills/deslop/LICENSE", "pi/references/skills.md", "pi/agents/profiles/analyst.md"]) assert.ok(paths.includes(path), path);
     assert.ok(!paths.some((p: string) => /how\/references\/(?:critic-prompt|critique-rubric)\.md/.test(p)));
-    assert.ok(!paths.some((p: string) => /automations\/benny|make-bot-ui|node_modules|^advisor\/|^tests\//.test(p)));
+    assert.ok(!paths.some((p: string) => /automations\/benny|make-bot-ui|node_modules|^(?:advisor|origin-apps|third_party|tests)\/|^pstack\/(?:README\.md|plugin\.json|\.cursor-plugin\/|agents\/|docs\/)/.test(p)));
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
     assert.equal(manifest.private, true); assert.equal(manifest.name, "pistack");
     assert.equal(manifest.dependencies, undefined); assert.equal(manifest.bundledDependencies, undefined);
-    assert.equal(manifest.pi.skills.length, 47); assert.ok(manifest.pi.skills.every((path: string) => /^\.\/pstack\/skills\/[a-z0-9-]+\/SKILL\.md$/.test(path))); assert.deepEqual(manifest["pi-subagents"].agents, ["./pi/agents/profiles"]);
+    assert.equal(manifest.pi.skills.length, 53); assert.ok(manifest.pi.skills.every((path: string) => /^\.\/pstack\/skills\/[a-z0-9-]+\/SKILL\.md$/.test(path))); assert.deepEqual(manifest["pi-subagents"].agents, ["./pi/agents/profiles"]);
     assert.match(readFileSync(join(root, "pstack/LICENSE"), "utf8"), /Copyright \(c\) 2026 Lauren Tan/);
   } finally { f.cleanup(); }
 });
@@ -33,7 +33,7 @@ test("actual Pi package loader discovers owned extension and selected skills; re
     await loader.reload();
     assert.deepEqual(loader.getExtensions().errors, []);
     assert.equal(loader.getExtensions().extensions.length, 1);
-    assert.equal(loader.getSkills().skills.length, 47);
+    assert.equal(loader.getSkills().skills.length, 53);
     assert.deepEqual(loader.getSkills().diagnostics, []);
     const modelRuntime = await ModelRuntime.create({ authPath: join(f.paths.agentDir, "auth.json"), modelsPath: null, modelsStorePath: join(f.paths.agentDir, "catalogs"), allowModelNetwork: false, refreshOnCreate: false });
     const manager = SessionManager.create(f.paths.cwd, join(f.root, "sessions"));
@@ -53,7 +53,7 @@ test("actual offline tarball loads all final resources outside the checkout with
     const packed = join(f.root, "package");
     assert.deepEqual(auditPackage(packed), []);
     const paths = filesUnder(packed);
-    assert.ok(!paths.some(p => /make-bot-ui|automations\/benny|node_modules|\.test\.ts$|^tests\/|^evals\/|install-key/.test(p)));
+    assert.ok(!paths.some(p => /make-bot-ui|automations\/benny|node_modules|\.test\.ts$|^(?:tests|evals|origin-apps|third_party)\/|^pstack\/(?:README\.md|plugin\.json|\.cursor-plugin\/|agents\/|docs\/)|install-key/.test(p)));
     for (const name of ["poteto-agent", "comment-sicko", "analyst"]) {
       const body = readFileSync(join(packed, `pi/agents/profiles/${name}.md`), "utf8");
       const roots = /^skillPath: (.+)$/m.exec(body)![1].split(", ").map(path => join(packed, "pi/agents/profiles", path));
@@ -63,7 +63,7 @@ test("actual offline tarball loads all final resources outside the checkout with
     const loader = new DefaultResourceLoader({ ...f.paths, settingsManager: SettingsManager.create(f.paths.cwd, f.paths.agentDir, { projectTrusted: true }) });
     await loader.reload();
     assert.deepEqual(loader.getExtensions().errors, []); assert.equal(loader.getExtensions().extensions.length, 1);
-    assert.deepEqual(loader.getSkills().diagnostics, []); assert.equal(loader.getSkills().skills.length, 47);
+    assert.deepEqual(loader.getSkills().diagnostics, []); assert.equal(loader.getSkills().skills.length, 53);
     assert.ok(loader.getSkills().skills.every(skill => skill.filePath.startsWith(packed + "/")));
     assert.deepEqual(loader.getPrompts().prompts, []); assert.deepEqual(loader.getThemes().themes, []);
     for (const path of ["README.md", "pstack/LICENSE", "pstack/skills/deslop/LICENSE", "pstack/skills/poteto-mode/scripts/bun.lock"]) assert.deepEqual(readFileSync(join(packed, path)), readFileSync(join(root, path)));

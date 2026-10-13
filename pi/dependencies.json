@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "qualification": "Local candidate pins observed with Pi 0.85.1. Not a release-qualified support matrix. Setup approval is still required.",
-  "piVersion": "0.85.1",
+  "qualification": "Core candidates loaded through the public Pi 1.1.0 SDK on macOS. Deterministic setup/model checks and parent discovery/deferred activation/static workflow validation passed; two real read-only native packaged-agent smoke calls passed, and independent correctness/conversion reviews found no unresolved blockers. Optional packages were not requalified. Not a release-qualified support matrix. Setup approval is still required.",
+  "piVersion": "1.1.0",
   "extensions": [
-    { "name": "pi-subagents", "version": "0.66.0", "required": true, "reason": "Isolated workers, packaged agent discovery, reviews and completion notifications", "repositories": ["github.com/nicobailon/pi-subagents"], "tools": ["subagent"] },
-    { "name": "pi-interactive-shell", "version": "0.15.2", "required": true, "reason": "Real CLI/TUI verification and long-running process monitoring", "repositories": ["github.com/nicobailon/pi-interactive-shell"], "tools": ["interactive_shell"] },
+    { "name": "pi-subagents", "version": "0.77.0", "required": true, "reason": "Isolated workers, packaged agent discovery, reviews and completion notifications", "repositories": ["github.com/nicobailon/pi-subagents"], "tools": ["subagent"] },
+    { "name": "pi-interactive-shell", "version": "0.17.0", "required": true, "reason": "Real CLI/TUI verification and long-running process monitoring", "repositories": ["github.com/nicobailon/pi-interactive-shell"], "tools": ["interactive_shell"] },
     { "name": "pi-goal", "version": "0.1.7", "required": true, "reason": "Explicit autonomous continuation; mode never starts a goal", "repositories": ["github.com/michaelliv/pi-goal"], "tools": ["create_goal"] },
     { "name": "pi-agent-browser-native", "version": "0.6.6", "required": false, "reason": "Browser/Electron evidence when an existing harness is insufficient; separate agent-browser >=0.35.0 and browser runtime required, ffmpeg for recording", "repositories": ["github.com/fitchmultz/pi-agent-browser-native"], "tools": ["agent_browser"] },
     { "name": "pi-mcp-adapter", "version": "2.32.1", "required": false, "reason": "Connected historical evidence; connectors and authentication remain separate", "repositories": ["github.com/nicobailon/pi-mcp-adapter"], "tools": ["mcp"] },

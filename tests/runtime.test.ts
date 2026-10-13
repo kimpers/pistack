@@ -93,6 +93,21 @@ test("actual plan checker accepts CLI evidence without goals/images and rejects 
   } finally { f.cleanup(); }
 });
 
+test("manual plan checker rejects /loop even with every required Pi marker", () => {
+  const f = fixture(); try {
+    const p = profile(), file = join(f.root, "plan.md"), config = join(f.root, "execution.json");
+    f.write(config, p);
+    const check = (text: string) => { f.write(file, text); return spawnSync(process.execPath, [join(scripts, "check-plan.mjs"), file, config], { encoding: "utf8" }); };
+    const valid = plan(p);
+    const accepted = check(valid);
+    assert.equal(accepted.status, 0, accepted.stderr);
+    assert.match(accepted.stdout, /1 PR sections, 0 problems/);
+    const rejected = check(valid.replace("### Boot recipe", "### Boot recipe\nRun /loop 1h."));
+    assert.equal(rejected.status, 1, rejected.stderr);
+    assert.match(rejected.stderr, /Manual profile must not arm a goal or periodic continuation/);
+  } finally { f.cleanup(); }
+});
+
 test("execution profile and real checker retain approved model:level selectors and reject effort drift", () => {
   const f = fixture(); try {
     const p = profile(); p.models.roles["swarm workers"] = ["fixture/model"];
@@ -139,9 +154,7 @@ test("normal retained CLI help/run remains check-only and actionable when depend
   } finally { f.cleanup(); }
 });
 
-test("retained upstream store/policy/GitHub suites execute without installing CLI dependencies", () => {
-  for (const args of [["test", `${scripts}/orch/orch.test.ts`, "--test-name-pattern", "^Store"], ["test", `${scripts}/watch-pr/policy.test.ts`, `${scripts}/watch-pr/github.test.ts`]]) {
-    const r = spawnSync("bun", args, { encoding: "utf8", timeout: 30000 });
-    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
-  }
+test("full retained helper suite executes without installing dependencies", () => {
+  const r = spawnSync("bun", ["run", "test"], { cwd: scripts, encoding: "utf8", timeout: 60000 });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
 });

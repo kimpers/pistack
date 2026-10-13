@@ -38,7 +38,7 @@ Record dropouts and distinguish content failures from infrastructure blockers. R
 
 ## Phase C: Aggregate
 
-Read the terminal results. Drop a result that does not record the SHAs and method its brief names, and rerun that worker once. After a second miss, record a gap. A gap does not count as a pass. For coverage, every required slice needs a result. For a race, apply the selection rule declared up front. Use first pass, rank all, or best-of. Do not paste raw worker dumps.
+Read the terminal results. Drop a result that does not record the SHAs and method its brief names, and have the parent respawn that role once in a fresh context with the consolidated brief and the failed receipt. Confirm the previous run is settled before transferring its write scope. After a second miss, record a gap. A gap does not count as a pass. For coverage, every required slice needs a result. For a race, apply the selection rule declared up front. Use first pass, rank all, or best-of. Do not paste raw worker dumps.
 
 Keep a compact result table, one-line evidenced issues, and explicit gaps or dropouts.
 

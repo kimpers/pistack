@@ -1,13 +1,31 @@
 # Upstream boundary
 
 - Source: [cursor/plugins](https://github.com/cursor/plugins).
-- Imported baseline: `c47b12849e43f18d5c374c7069c744cc55b0ea00`.
-- Previous import: `93b00b89ef425a9c1bac0d0b317dfc49c930ac99`; refresh source checkpoint: `2c852d3f2517b968625724197949448f79a27e99`.
-- Upstream plugin: pstack `0.15.5`, original `pstack/` paths retained.
+- Imported baseline: `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454`.
+- Previous import: `c47b12849e43f18d5c374c7069c744cc55b0ea00`; refresh source checkpoint: `977f9e078f34cda30d8b103936f66a76d6e7c1e7`.
+- Upstream plugin: pstack `0.15.23`, original `pstack/` paths retained.
 - License: [pstack/LICENSE](../pstack/LICENSE), MIT, Copyright (c) 2026 Lauren Tan. Retain this notice with every distribution and substantial adaptation.
-- Refresh branch: `update/pstack-c47b128`. Parent-owned promotion order is **VERIFIED → COMMIT → LOCAL INSTALL/UPDATE + SMOKE → PUSH**; independent acceptance precedes promotion. The repository destination is `git@github.com:kimpers/piStack.git`. Root npm package `pistack` remains provisional and private. No npm publication is authorized.
+- Refresh branch: `update/pstack-dbf4981`. Independent acceptance precedes publication. For this refresh, the owner authorized a signed commit and push of the refresh branch after verification, without installed-source promotion. The historical personal-promotion order remains **VERIFIED → COMMIT → LOCAL INSTALL/UPDATE + SMOKE → PUSH** when that separate operation is approved. The repository destination is `git@github.com:kimpers/piStack.git`. Root npm package `pistack` remains provisional and private. No npm publication is authorized.
 
-## Frozen 0.15.5 refresh qualification
+## Frozen 0.15.23 refresh qualification
+
+The [disposition inventory](upstream-updates/dbf4981.md) accounts for 149 rename-aware upstream records, including 90 pstack paths. The package exposes 53 skills and 24 principles. Six new direct skills cover benchmark checks, structural corrections, goal restatement, session recap, help, and explaining measurements. Other monorepo integrations remain excluded. Licenses, bundled deslop, and the helper lock are unchanged. The helper manifest changes only its test command.
+
+The retained watcher collects every review-thread page before deciding readiness and rejects malformed pagination or cursor cycles. Existing exact-head, topology, cancellation, and no-merge-authority checks remain. The plan checker tracks fence character and length, preserves required Pi profiles, and rejects manual `/loop` instructions. Cleanup accepts an optional explicit local base, freezes its commit once, and reports advisory ancestry without deletion authority or fetching. Only new/default model panels change to two entries. Saved panels, exact IDs, effort, concurrency, and unlimited semantics remain intact.
+
+Current candidates are Pi 1.1.0, pi-subagents 0.77.0, pi-interactive-shell 0.17.0, and pi-goal 0.1.7. Existing core packages loaded through public manifests in a temporary macOS profile. Setup decline, cancellation, approved save, and idempotent reuse were tested without extension installation. Offline model checks preserve exact selectors. Parent-only discovery, deferred activation, public workflow validation, private skills, user/project overrides, and disabled agents passed. Static workflow validation launched no children. A parent-observed test-contract correction now checks success JSON in text content and failure JSON in the thrown error, rather than assuming verdict fields in generic management details.
+
+Parent helper checks passed 107 tests with 464 assertions, strict helper typechecking, and both CLI help commands. These are local fixture and executable-help results, not authenticated forge proof. Helpers were provisioned once through the approved setup APIs with the frozen lock in this isolated worktree. The second application made no changes. No core extension was installed or upgraded.
+
+Parent integrated checks passed 154 Node tests with zero skips, strict adapter typechecking, extracted-tarball/resource/link checks, and the synthetic update rehearsal from the new baseline. Independent correctness and conversion reviewers returned READY with no unresolved source-proven blockers. They used fresh same-model contexts, not model-family diversity; the conversion reviewer read all 66 adaptation diffs and reconciled all 149 upstream records. Private evidence is under `/tmp/pistack-refresh-dbf4981.zIZ6ZY/`, including the component handoffs, preserved protocol-failure artifacts, parent test logs, and exact validation responses. Child skips do not count as parent passes. Final deterministic evaluation evidence is recorded separately from live calls, with `releaseQualified` remaining false.
+
+Exactly two approved real packaged-agent calls completed with exit 0 through the public native subagent tool in an isolated SDK session: `pistack.analyst` and `pistack.poteto-agent`, both using freshly resolved `openai-codex/gpt-6-astra` selectors. The temporary poteto override restricted tools to reads. Both read the development package's foundation, integration contract, README and manifest; their tool records contain only reads. Reload/on/off restoration passed. Personal settings, model policy and auth bytes were unchanged, and the temporary auth copy was removed. This is bounded native model execution, not background-child, goal, monitor or full-workflow qualification. Three earlier smoke-harness preflights failed before any child call; their reports remain preserved.
+
+The current personal package source is Git-pinned at `977f9e078f34cda30d8b103936f66a76d6e7c1e7`. This development worktree is not the installed source. The owner's later “when done commit and push” instruction authorizes this refresh branch's verified signed commit and push. PRs, personal settings changes, installed-cache edits, and activation remain outside that authority. Promotion needs a separately approved mechanism for the pinned source; a development checkout update alone cannot activate it.
+
+Linux, clean-host and minimum-Node qualification, browser/application-PTY, authenticated forge workflows, and broad autonomous lifecycle checks remain unavailable. The manual CI workflow now names the current candidates but has not run. Optional package pins are unchanged and were not requalified. The following sections retain historical evidence, not acceptance of 0.15.23.
+
+## Historical 0.15.5 refresh qualification
 
 The [disposition inventory](upstream-updates/c47b128.md) covers all 100 changed pstack paths: 96 modifications, two new principles and two deleted how critique references. The explicit package exposes **47 skills / 23 principles**. No upstream-only monorepo plugin becomes a Pi resource. Deslop, imported licenses and helper dependency inputs are unchanged; the existing verified ignored dependencies/readiness marker were reused without installation or edits.
 
@@ -30,7 +48,7 @@ Mode on survived `/reload`; mode off plus the completed checklist survived anoth
 
 **This bounded local acceptance is not release qualification.** The installed checkout stays unchanged until the acceptance commit; local update and a fresh installed-source smoke are required before push. Browser/application-PTY, authenticated forge operations, full goal/monitor/worker cancellation lifecycle, clean-host provisioning, minimum Node and Linux remain unqualified unless separately exercised. Historical smoke below is not evidence for this refreshed source. Parent alone owns VERIFIED → COMMIT → LOCAL INSTALL/UPDATE + SMOKE → PUSH.
 
-## Adaptations in U1/U2
+## Historical adaptations in U1/U2
 
 | Path | Reason |
 | --- | --- |
@@ -43,7 +61,7 @@ Mode on survived `/reload`; mode off plus the completed checklist survived anoth
 | `pstack/skills/poteto-mode/scripts/bootstrap.ts` | Approved narrow U2/U4 boundary change: checks current dependency/lock readiness, never installs or restarts. Only an explicitly approved setup step may install and write the readiness marker. Watcher/store/cleanup changes are recorded in U4 below. |
 | `tests/` | Built-in Node tests plus real installed Pi SDK/SessionManager/ModelRegistry/resource-loader integration with isolated fixtures. No test dependencies installed. |
 
-## U3 skill ports
+## Historical U3 skill ports
 
 The explicit manifest now activates 47 original-path skills, including all 23 principles. Every direct entry and playbook loads the common integration policy. Hidden leaves stay hidden from automatic discovery and remain directly invocable; mode routes through the original poteto-mode index. No generated second corpus is maintained.
 
@@ -55,7 +73,7 @@ Targeted source edits replace Task/model/cloud/path/trigger assumptions with pub
 
 `tests/skills.test.ts` and `tests/workflows.test.ts` check resource loading, direct skill contracts, hidden routing, links, unsafe instruction regressions and workflow/authority invariants. These static/fixture tests are not model compliance, child launch, live browser/PTY or network integration proof.
 
-## U4 retained runtime ports
+## Historical U4 retained runtime ports
 
 `pstack/skills/poteto-mode/scripts/orch/frontier.ts` isolates gh-first linear/frozen topology and double-read forge heads; the existing plain-file store, ledger, inbox and lock semantics remain. Graphite is no longer a requirement. Watcher reader/policy tests remain upstream-adjacent; targeted changes reject stale-head checks and changed queue topology, expose non-authorizing head proof, and stop owned polling/GitHub subprocesses on interruption. No agent executor or goal scheduler was added.
 
@@ -72,9 +90,9 @@ Targeted source edits replace Task/model/cloud/path/trigger assumptions with pub
 5. Run `npm test`, packaging validation and U3/U4/U5 workflow/update-rehearsal checks. Review unresolved incompatibilities rather than silently dropping features.
 6. Only the owner chooses final distribution identity, repository/npm ownership, releases and publication. Removing piStack must not remove shared packages or personal policy.
 
-Both frozen imports are retained in Git ancestry. The real 0.15.5 delta is covered by the [100-path refresh disposition](upstream-updates/c47b128.md). The synthetic rehearsal below tests future update handling; it is not the audit of that real delta.
+The prior frozen imports are retained in Git ancestry. The 0.15.23 refresh retains the new target as its upstream merge parent. The real 0.15.5 delta is covered by the [100-path refresh disposition](upstream-updates/c47b128.md), and the new delta by the [0.15.23 disposition](upstream-updates/dbf4981.md). The synthetic rehearsal below tests future update handling; it is not the audit of that real delta.
 
-## Packaging and update qualification
+## Historical packaging and update qualification
 
 Root `README.md` is automatically included by npm even with a `files` allowlist. At the owner's request, it now gives a concise piStack purpose, local and Git installation steps. It links to the upstream pstack and original catalog at this document's imported SHA instead of reproducing the catalog. Git ancestry and license files remain intact. Other plugins are not bundled. `tests/upstream-sync.test.ts` rejects missing or stale README upstream pins when the recorded baseline advances. Active-source Markdown scans exclude installed `node_modules` while retaining owned helper documentation and broken-link checks.
 
@@ -92,7 +110,7 @@ The parent independently passed all 103 Node tests with no skips, including pack
 
 A live Pi TUI started with mode off, retained mode on across `/reload`, executed checklist start/completion and active-session history tools successfully, then persisted mode off and the completed checklist before exit. A second Pi process resumed that session with mode off and the completed checklist intact. These are bounded local smoke checks, not clean-host, cross-platform, autonomous goal, browser or authenticated forge qualification. No unrelated personal skill warnings were repaired or hidden.
 
-### Support matrix (candidate, not release-qualified)
+### Historical 0.15.5 support matrix, not current qualification
 
 | Surface | Observed evidence | Remaining gate |
 | --- | --- | --- |
@@ -107,7 +125,7 @@ A live Pi TUI started with mode off, retained mode on across `/reload`, executed
 
 ### Authored CI and release gates
 
-`.github/workflows/pistack.yml` is manual `workflow_dispatch` only, with a required **default-false** `approve_provisioning` input gating the entire hosted macOS/Linux matrix. The authoring approval is not permission to dispatch it. A future authorized run explicitly downloads Node 26.0.0, Bun 1.3.14 and Pi 0.85.1; the isolated real setup script proposes/applies exactly the three core candidates above plus `bun install --frozen-lockfile` in the verified owned scripts directory. Only successful dependency checks record the readiness fingerprint. The frozen upstream lock constrains its `latest` development declarations; no floating installer command or silent browser/auth download is used. Shared npm transitive resolutions and runner images still need recorded-version review; these are candidate pins, not a fully reproducible release lock.
+`.github/workflows/pistack.yml` is manual `workflow_dispatch` only, with a required **default-false** `approve_provisioning` input gating the entire hosted macOS/Linux matrix. The authoring approval is not permission to dispatch it. A future authorized run explicitly downloads Node 26.0.0, Bun 1.3.14 and Pi 1.1.0; the isolated real setup script proposes/applies exactly pi-subagents 0.77.0, pi-interactive-shell 0.17.0, and pi-goal 0.1.7 plus `bun install --frozen-lockfile` in the verified owned scripts directory. Only successful dependency checks record the readiness fingerprint. The frozen upstream lock constrains its `latest` development declarations; no floating installer command or silent browser/auth download is used. Shared npm transitive resolutions and runner images still need recorded-version review; these are candidate pins, not a fully reproducible release lock.
 
 The job uses only disposable runner-temp settings/homes, verifies clean setup and an existing-extension rerun, loads actual resources, runs local suites and installed helpers/typecheck/help, and retains logs as CI artifacts. It never publishes the private package, launches live children or creates goals. Hosted CI has **not run**. Personal local installation reused existing core extensions and applied the approved helper proposal; it did not test clean core network provisioning. See development `evals/README.md` for exact offline commands and future live evaluation protocol.
 

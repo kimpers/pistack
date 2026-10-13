@@ -11,11 +11,11 @@ export const roleDefaults = {
   "why synthesizer": 1,
   "reflect tooling": 1,
   "reflect judgment, divergent, synthesizer": 1,
-  "arena runners": 3,
-  "arena cross-judge pool": 3,
+  "arena runners": 2,
+  "arena cross-judge pool": 2,
   "swarm workers": 1,
-  "architect runners": 3,
-  "interrogate reviewers": 3,
+  "architect runners": 2,
+  "interrogate reviewers": 2,
 } as const;
 export type Role = keyof typeof roleDefaults;
 export interface ModelIdentity { provider: string; id: string }

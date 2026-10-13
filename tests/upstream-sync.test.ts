@@ -8,7 +8,8 @@ import { fixture } from "./fixtures.ts";
 import { auditPackage, upstreamChanges } from "./upstream-sync-support.ts";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const originalBaseline = "93b00b89ef425a9c1bac0d0b317dfc49c930ac99";
-const baseline = "c47b12849e43f18d5c374c7069c744cc55b0ea00";
+const previousBaseline = "c47b12849e43f18d5c374c7069c744cc55b0ea00";
+const baseline = "dbf49813a39c1a5389c5e28cb8e4c1c2379e2454";
 const rubric = "pstack/skills/interrogate/references/rubric.md";
 const skill = "pstack/skills/principle-model-the-domain/SKILL.md";
 const helpers = "pstack/skills/poteto-mode/scripts/package.json";
@@ -64,6 +65,10 @@ test("upstream Git rehearsal inventories additions/changes/deletions and depende
     f.write(join(repo, newSkill), read(newSkill) + "\nRead [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.\n");
     const index = "pi/references/skills.md";
     f.write(join(repo, index), read(index).split("\n").filter(line => !line.includes("bro/SKILL.md")).join("\n") + `\n[Fixture new](../../${newSkill})\n`);
+    for (const caller of ["pstack/skills/ketchup/SKILL.md", "pstack/skills/poteto-help/SKILL.md"]) {
+      assert.ok(pending.some(problem => problem.includes(`Broken packaged link: ${caller} -> ../bro/SKILL.md`)), caller);
+      f.write(join(repo, caller), read(caller).replace("[bro](../bro/SKILL.md)", "plain speech"));
+    }
     // Dependency change is explicitly held, not installed or accepted as a qualified candidate.
     git("restore", `--source=${imported}`, "--", helpers, "pstack/skills/poteto-mode/scripts/bun.lock");
     assert.deepEqual(auditPackage(repo), []);
@@ -102,7 +107,7 @@ test("update gate rejects wildcard/deferred re-enablement, deleted adapter impor
 
 
 test("frozen refresh dispositions cover every upstream path and deleted how critique resources cannot return", () => {
-  const report = upstreamChanges(root, originalBaseline, baseline);
+  const report = upstreamChanges(root, originalBaseline, previousBaseline);
   const changed = report.changes.filter(c => c.path.startsWith("pstack/"));
   const inventory = readFileSync(join(root, "pi/upstream-updates/c47b128.md"), "utf8");
   const rows = [...inventory.matchAll(/^\| `(pstack\/[^`]+)` \| ([PARDN])\./gm)];
@@ -119,6 +124,32 @@ test("frozen refresh dispositions cover every upstream path and deleted how crit
   ]);
   for (const path of ["pstack/skills/how/SKILL.md", "pstack/skills/architect/SKILL.md", "pstack/skills/poteto-mode/playbooks/investigation.md"])
     assert.doesNotMatch(readFileSync(join(root, path), "utf8"), /how critics|critique-rubric|critic-prompt|how[^\n]*critique/i);
-  const unchanged = execFileSync("git", ["diff", originalBaseline, baseline, "--", "cursor-team-kit/skills/deslop", "pstack/LICENSE", "cursor-team-kit/LICENSE", helpers, "pstack/skills/poteto-mode/scripts/bun.lock"], { cwd: root, encoding: "utf8" });
+  const unchanged = execFileSync("git", ["diff", originalBaseline, previousBaseline, "--", "cursor-team-kit/skills/deslop", "pstack/LICENSE", "cursor-team-kit/LICENSE", helpers, "pstack/skills/poteto-mode/scripts/bun.lock"], { cwd: root, encoding: "utf8" });
   assert.equal(unchanged, "", "licenses, deslop and frozen helper inputs have no upstream change");
+});
+
+test("0.15.23 inventory covers 90 pstack paths and preserves excluded monorepo bytes", () => {
+  const target = baseline;
+  const changed = upstreamChanges(root, previousBaseline, target).changes;
+  const pstack = changed.filter(c => c.path.startsWith("pstack/"));
+  assert.equal(pstack.length, 90);
+  assert.equal(pstack.filter(c => c.status === "A").length, 10);
+  assert.equal(pstack.filter(c => c.status === "M").length, 80);
+  const inventory = readFileSync(join(root, "pi/upstream-updates/dbf4981.md"), "utf8");
+  const rows = [...inventory.matchAll(/^\| `(pstack\/[^`]+)` \| ([PARN])\./gm)];
+  assert.deepEqual(rows.map(row => row[1]).sort(), pstack.map(c => c.path).sort());
+  const other = changed.filter(c => !c.path.startsWith("pstack/"));
+  assert.equal(other.length, 60, "59 rename-aware records expand the Mercury license rename into two paths");
+  for (const change of [...other, ...pstack.filter(c => !c.path.startsWith("pstack/skills/"))]) {
+    assert.ok(inventory.includes(`\`${change.path}\``), change.path);
+    if (change.path === "README.md") continue;
+    if (change.status === "D") assert.equal(existsSync(join(root, change.path)), false, change.path);
+    else assert.deepEqual(readFileSync(join(root, change.path)), execFileSync("git", ["show", `${target}:${change.path}`], { cwd: root }), change.path);
+  }
+  for (const path of ["pstack/LICENSE", "cursor-team-kit/LICENSE", "cursor-team-kit/skills/deslop/SKILL.md", "pstack/skills/poteto-mode/scripts/bun.lock"]) {
+    assert.equal(execFileSync("git", ["diff", previousBaseline, target, "--", path], { cwd: root, encoding: "utf8" }), "", path);
+    assert.deepEqual(readFileSync(join(root, path)), execFileSync("git", ["show", `${target}:${path}`], { cwd: root }), path);
+  }
+  for (const path of ["pstack/skills/deslop/SKILL.md", "pstack/skills/deslop/LICENSE"]) assert.deepEqual(readFileSync(join(root, path)), execFileSync("git", ["show", `HEAD:${path}`], { cwd: root }), path);
+  assert.deepEqual(readFileSync(join(root, helpers)), execFileSync("git", ["show", `${target}:${helpers}`], { cwd: root }));
 });

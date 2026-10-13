@@ -152,10 +152,33 @@ test("doctor verification is consent-only; actual normal transcript results are 
   const f = fixture(); try {
     const h = harness(f);
     await h.command("doctor verify"); assert.equal(h.prompts.length, 0);
-    h.ctx.ui.confirm = async () => true; await h.command("doctor verify");
+    const confirmations: string[] = [];
+    h.ctx.ui.confirm = async (_title: string, text: string) => { confirmations.push(text); return true; };
+    await h.command("doctor verify");
     assert.equal(h.prompts.length, 1); assert.match(h.prompts[0], /action:'list'/); assert.match(h.prompts[0], /Do not launch/);
+    assert.match(confirmations[0], /subagents_enable/);
+    assert.match(h.prompts[0], /subagents_enable\(\{\}\)/);
+    assert.match(h.prompts[0], /If .*unavailable[\s\S]*report unknown/);
+    assert.match(h.prompts[0], /pistack\.analyst/);
+    h.ctx.hasUI = false; await h.command("doctor verify");
+    assert.equal(h.prompts.length, 1, "headless verification must not start a model turn");
     assert.equal(h.manager.getEntries().length, 0);
     h.ctx.hasUI = false; await h.command("setup"); assert.match(h.messages.at(-1)!, /requires native Pi dialogs/);
+  } finally { f.cleanup(); }
+});
+test("passive doctor reports deferred activation without changing tools, starting turns or writing readiness", async () => {
+  const f = fixture(); try {
+    const h = harness(f);
+    const active = ["subagents_enable"];
+    h.pi.getActiveTools = () => [...active];
+    h.pi.getAllTools = () => [{ name: "subagents_enable", sourceInfo: { path: join(f.root, "subagents/entry.js") } }];
+    h.pi.setActiveTools = () => { throw new Error("passive doctor cannot activate tools"); };
+    await h.command("doctor");
+    assert.match(h.messages.join("\n"), /subagents_enable.*doctor verify/);
+    assert.deepEqual(active, ["subagents_enable"]);
+    assert.deepEqual(h.prompts, []);
+    assert.equal(h.manager.getEntries().length, 0);
+    assert.equal(existsSync(configPath(f.paths, "user")), false);
   } finally { f.cleanup(); }
 });
 test("passive public ping handles current session, stale reply and absent provider without hanging", async () => {

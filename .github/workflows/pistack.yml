@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       approve_provisioning:
-        description: 'Approve isolated runner downloads: Node 26.0.0, Bun 1.3.14, Pi 0.85.1, core candidates and frozen helper lock (see pi/UPSTREAM.md)'
+        description: 'Approve isolated runner downloads: Node 26.0.0, Bun 1.3.14, Pi 1.1.0, core candidates and frozen helper lock (see pi/UPSTREAM.md)'
         type: boolean
         required: true
         default: false
@@ -53,10 +53,10 @@ jobs:
       - name: Approved exact Pi host provisioning
         run: |
           set -o pipefail
-          npm install --global --prefix "$RUNNER_TEMP/pistack-host" @earendil-works/pi-coding-agent@0.85.1 2>&1 | tee evals/results/ci/provisioning.log
+          npm install --global --prefix "$RUNNER_TEMP/pistack-host" @earendil-works/pi-coding-agent@1.1.0 2>&1 | tee evals/results/ci/provisioning.log
       - name: Approved real setup and existing-extension rerun
         # Uses public piStack proposal/application. Exact core candidates:
-        # pi-subagents 0.66.0, pi-interactive-shell 0.15.2, pi-goal 0.1.7.
+        # pi-subagents 0.77.0, pi-interactive-shell 0.17.0, pi-goal 0.1.7.
         # Helpers use bun install --frozen-lockfile in the owned scripts directory;
         # commander 14.0.0, bun-types 1.3.14, TypeScript 7.0.2 are lock resolutions.
         # No optional browser/MCP/web/interview package, browser runtime or auth download.
@@ -75,7 +75,7 @@ jobs:
         working-directory: pstack/skills/poteto-mode/scripts
         run: |
           set -o pipefail
-          bun test orch watch-pr 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/helpers-tests.log"
+          bun run test 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/helpers-tests.log"
           bun run typecheck 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/helpers-typecheck.log"
           bun run orch/orch.ts --help 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/orch-help.log"
           bun run watch-pr/watch-pr --help 2>&1 | tee "$GITHUB_WORKSPACE/evals/results/ci/watcher-help.log"

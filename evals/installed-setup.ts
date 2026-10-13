@@ -15,7 +15,7 @@ for (const path of [process.env.HOME!, process.env.PI_CODING_AGENT_DIR!]) {
   const within = relative(temp, realpathSync(path));
   assert.ok(within && !within.startsWith("..") && !within.startsWith("/"), "Only isolated runner-temp homes may be provisioned");
 }
-assert.deepEqual(dependencyManifest.extensions.filter(d => d.required).map(d => `${d.name}@${d.version}`), ["pi-subagents@0.66.0", "pi-interactive-shell@0.15.2", "pi-goal@0.1.7"], "Candidate changes need workflow review");
+assert.deepEqual(dependencyManifest.extensions.filter(d => d.required).map(d => `${d.name}@${d.version}`), ["pi-subagents@0.77.0", "pi-interactive-shell@0.17.0", "pi-goal@0.1.7"], "Candidate changes need workflow review");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const paths = { cwd: join(temp, "pistack-setup-project"), agentDir: resolve(process.env.PI_CODING_AGENT_DIR!), projectTrusted: false };
 mkdirSync(paths.cwd, { recursive: true });

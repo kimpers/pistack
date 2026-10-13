@@ -44,7 +44,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] `<resolved project verification skill path>`
   - [ ] `<resolved package>/pstack/skills/poteto-mode/playbooks/opening-a-pr.md`
   - [ ] `<resolved package>/pstack/skills/<each other leaf skill the program uses>`
-- [ ] <Autonomous profile only. If authorized, use one owned finite monitored audit wait or event source under the Pi runtime contract, not another scheduler. Stop it on pause. Manual profiles omit this box and the tick prompt below.>
+- [ ] <Autonomous profile only. If authorized, use one owned finite monitored hourly audit wait or event source under the Pi runtime contract, not another scheduler. Stop it on pause. Manual profiles omit this box and the tick prompt below.>
 - [ ] Use this tick prompt, verbatim. "Re-read the packaged Pi execution playbook and the current goal status. Audit the operation against both and fix drift in this tick. Probe every active lane using exact native status and output; read-only work need not have side effects. Checkpoint and interrupt/stop an owned stuck lane, confirm settlement and preserve its partial diff before any same-protocol replacement. Post a short status message only for tracked changes not reported earlier, such as a PR opened, code-ready head, round launched or closed, verdict, merge, stuck-run action, blocker added or cleared, or operator decision. Name those changes only. Do not repeat unchanged tables or blockers. With no change, omit routine reply text, but never suppress a required blocker or approval response. Always append the tick to the decision trail with reported items or none."
 - [ ] On the operator's hold or stand-down, send every owner a zero-writes order at once.
 
@@ -60,7 +60,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 ### PR mechanics, for every PR
 
 - [ ] Resolve the forge once. Default to `gh`; if `command -v origin` succeeds and Origin can resolve the repository, use `origin pr` for every PR operation. Record any fallback to `gh`. Never require `gt`.
-- [ ] Open the PR ready, never draft, with `origin pr create --status open --base <base-branch>` or `gh pr create --base <base-branch>` according to the resolved forge. A stack child targets its parent branch.
+- [ ] Open the PR ready, never draft, per **Opening a PR**. Use an available authorized PR tool when its public contract requires tracking, else `origin pr create --status open --base <base-branch>` or `gh pr create --base <base-branch>` according to the resolved forge. A stack child targets its parent branch.
 - [ ] Run the repo's lint and typecheck once before the PR-facing push. Push with hooks on.
 - [ ] Run `/skill:deslop` before each commit and `/skill:no-comments` before review.
 - [ ] Triage every Bugbot and security-reviewer comment per `<resolved package>/pstack/skills/poteto-mode/references/bugbot-triage.md`.

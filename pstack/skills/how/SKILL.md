@@ -11,37 +11,29 @@ Read [the Pi integration contract](../../../pi/references/integration.md) before
 
 Explore the codebase to answer "how does X work?" questions. Produce architectural explanations at the level of a senior engineer onboarding onto a subsystem, enough to build a working mental model, not so much that it reads like annotated source code.
 
-Resolve the named roles and effort policy through [native delegation and models](../../../pi/references/delegation.md). Use only discovered IDs, never guessed aliases or model-family fallbacks.
+Resolve the named roles and effort policy through [native delegation and models](../../../pi/references/delegation.md). Use only discovered IDs, never guessed aliases or model-family fallbacks. The parent launches fresh `pistack.analyst` runs with `how explorer` for source slices and `how explainer` for explanation. Keep read-only tools, bounded returned artifacts, configured concurrency and no child fanout.
 
-## Step 1. Assess Complexity
+## 1. Assess complexity
 
 If the scope is ambiguous, state your interpretation and explore. The user can redirect.
 
-- **Simple** (a single module, a small utility, a narrow question such as "how does function X work"): no explorers. One explainer explores and explains in a single pass. Go to Step 2b.
-- **Complex** (a subsystem spanning multiple files or services, a cross-cutting feature, a full architectural overview): spawn parallel explorers first, then hand off to the explainer. Go to Step 2a.
+- **Simple** (a single module, a small utility, a narrow question such as "how does function X work"): no explorers. Spawn one explainer that explores and explains in one pass, built from `references/explainer-prompt.md` without the explorer-findings section. Go to step 4.
+- **Complex** (a subsystem spanning multiple files or services, a cross-cutting feature, a full architectural overview): go to step 2.
 
 When in doubt, take the simple path.
 
-## Step 2a. Explore (complex questions only)
+## 2. Explore (complex only)
 
-Decompose the question into 2 to 4 exploration angles, each a distinct slice of the subsystem. Spawn all explorers in a single message:
+Decompose the question into 2 to 4 angles, each a distinct slice of the subsystem. Launch the independent native explorers within configured concurrency, each with `references/explorer-prompt.md` and its angle filled in.
 
-Use fresh `pistack.analyst` runs with role `how explorer` per the integration contract. Read-only tools, bounded returned artifacts, no child fanout. Each explorer gets `references/explorer-prompt.md` with its angle filled in. Then go to Step 3.
+## 3. Synthesize (complex only)
 
-## Step 2b. Direct Explain (simple questions)
+Once all explorers have returned, spawn one explainer with `references/explainer-prompt.md` and every explorer's findings filled in.
 
-Spawn one fresh native `pistack.analyst` with role `how explainer`. Build its prompt from `references/explainer-prompt.md` without the explorer-findings section. Go to Step 4.
+## 4. Present
 
-## Step 3. Synthesize (complex questions only)
+Present the explainer's output. Light edits for clarity or context from the conversation are fine. Do not substantially rewrite it.
 
-Once all explorers have returned, launch one fresh native `pistack.analyst` with role `how explainer` to synthesize their findings into one explanation.
-
-Build its prompt from `references/explainer-prompt.md` with every explorer's findings filled in.
-
-## Step 4. Present
-
-Present the explainer's output to the user. Light edits for clarity or context from the conversation are fine. Do not substantially rewrite it.
-
-## Output Format
+## Output format
 
 The explanation uses the sections defined in `references/explainer-prompt.md`, dropping any that do not apply: Overview, Key Concepts, How It Works, Where Things Live, Gotchas.

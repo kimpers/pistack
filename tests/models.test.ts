@@ -1,13 +1,38 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { ModelRuntime, ModelRegistry } from "@earendil-works/pi-coding-agent";
-import { availableModelIds, defaultModels, parseModels, resolveRole, validateAvailable } from "../pi/lib/models.ts";
+import { availableModelIds, defaultModels, parseModels, resolveRole, retireModelRoles, validateAvailable, type Role } from "../pi/lib/models.ts";
+import { loadConfig } from "../pi/lib/setup.ts";
 import { fixture } from "./fixtures.ts";
 
-test("defaults explicitly inherit; panels preserve upstream cardinality independent from concurrency", () => {
+const panelRoles = ["arena runners", "arena cross-judge pool", "architect runners", "interrogate reviewers"] as const satisfies readonly Role[];
+
+for (const role of panelRoles) test(`new ${role} resolves two inherited seats without setting effort`, () => {
+  const config = parseModels(defaultModels());
+  const panel = resolveRole(config, role, ["custom/owner/model"], { provider: "custom", id: "owner/model" });
+  assert.deepEqual(panel.models, ["custom/owner/model", "custom/owner/model"]);
+  assert.deepEqual(panel.runs, [
+    { model: "custom/owner/model", selector: "custom/owner/model", policy: "inherit native parent/agent effort" },
+    { model: "custom/owner/model", selector: "custom/owner/model", policy: "inherit native parent/agent effort" },
+  ]);
+  assert.equal(panel.concurrency, 4);
+  assert.equal(panel.budget, "unlimited");
+  assert.equal(panel.distinctModels, 1);
+  assert.match(panel.diversity, /not multi-model diversity/);
+});
+
+test("single-seat roles still resolve one inherited model", () => {
+  for (const role of ["feature, refactoring", "bug-fix", "perf-issue", "hillclimb", "judgment and prose", "hardest tasks", "how explorer", "how explainer", "why investigators", "why synthesizer", "reflect tooling", "reflect judgment, divergent, synthesizer", "swarm workers"] as const) {
+    const panel = resolveRole(parseModels(defaultModels()), role, ["custom/owner/model"], { provider: "custom", id: "owner/model" });
+    assert.deepEqual(panel.models, ["custom/owner/model"]);
+    assert.equal(panel.concurrency, 4);
+  }
+});
+
+test("panels preserve saved cardinality independent from concurrency", () => {
   const config = defaultModels();
-  assert.equal(config.roles["arena runners"].length, 3);
   config.roles["arena runners"] = Array(4).fill("inherit");
   const parent = { provider: "custom", id: "owner/model" };
   const panel = resolveRole(config, "arena runners", ["custom/owner/model"], parent);
@@ -15,6 +40,43 @@ test("defaults explicitly inherit; panels preserve upstream cardinality independ
   config.concurrency = 1; assert.equal(resolveRole(config, "arena runners", ["custom/owner/model"], parent).models.length, 4);
   assert.throws(() => resolveRole(config, "arena runners", [], parent), /Unavailable/);
 });
+test("loading without a saved profile uses two seats without writing a profile", () => {
+  const f = fixture(); try {
+    const loaded = loadConfig(f.paths);
+    assert.deepEqual(loaded.config.models.roles["arena runners"], ["inherit", "inherit"]);
+    assert.equal(existsSync(loaded.path), false);
+  } finally { f.cleanup(); }
+});
+
+for (const count of [1, 3, 5, 32]) test(`loading saved ${count}-seat panels preserves entries, effort, concurrency and file bytes`, () => {
+  const f = fixture(); try {
+    const config = defaultModels();
+    const entries = Array.from({ length: count }, (_, i) => i % 2 ? "inherit" : "saved/owner/model");
+    for (const role of panelRoles) config.roles[role] = [...entries];
+    config.roles["how critics"] = ["saved/retired"];
+    config.concurrency = 1;
+    config.budget = "medium";
+    config.thinking = { "saved/owner/model": "high" };
+    const path = join(f.paths.agentDir, "pistack.json");
+    f.write(path, { version: 1, models: config, optional: [], helpers: false });
+    const before = readFileSync(path, "utf8");
+    const loaded = loadConfig(f.paths).config.models;
+    assert.deepEqual(loaded, config);
+    for (const role of panelRoles) {
+      const panel = resolveRole(loaded, role, ["saved/owner/model", "parent/current"], { provider: "parent", id: "current" }, [{ provider: "saved", id: "owner/model", reasoning: true }]);
+      assert.deepEqual(panel.models, entries.map(entry => entry === "inherit" ? "parent/current" : "saved/owner/model"));
+      assert.deepEqual(panel.runs.map(run => run.selector), entries.map(entry => entry === "inherit" ? "parent/current" : "saved/owner/model:high"));
+      assert.equal(panel.concurrency, 1);
+      assert.equal(panel.budget, "medium");
+    }
+    const retired = retireModelRoles(loaded);
+    assert.equal(Object.hasOwn(retired.roles, "how critics"), false);
+    assert.deepEqual(loaded.roles["how critics"], ["saved/retired"]);
+    for (const role of panelRoles) assert.deepEqual(retired.roles[role], entries);
+    assert.equal(readFileSync(path, "utf8"), before);
+  } finally { f.cleanup(); }
+});
+
 test("available model discovery respects session scopes and rejects unavailable configured IDs", () => {
   const a = { provider: "a", id: "model/one" }, b = { provider: "b", id: "two" };
   assert.deepEqual(availableModelIds([b, a, a], [{ model: a }]), ["a/model/one"]);

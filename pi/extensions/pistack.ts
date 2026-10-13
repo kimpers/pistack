@@ -121,6 +121,7 @@ export default function pistack(pi: ExtensionAPI) {
         return tool ? `${name} ${active.includes(name) ? "active" : "loaded/inactive"} from ${tool.sourceInfo.path}` : `${name} NOT LOADED`;
       }).join("; ")}`);
     }
+    if (!active.includes("subagent") && tools.some(tool => tool.name === "subagents_enable")) lines.push("Subagent inspection is deferred. subagents_enable is available; /pistack doctor verify can request activation after consent. Passive doctor does not activate tools.");
     for (const prerequisite of await inspectPrerequisites(currentPaths, inspection.config)) lines.push(`${prerequisite.name}: ${prerequisite.ready ? "available" : "NOT READY"} ${prerequisite.detail}`);
     lines.push(helperStatus().reason);
     const { available, support } = discoverModels(ctx);
@@ -227,8 +228,8 @@ export default function pistack(pi: ExtensionAPI) {
           case "setup cancel": setupController?.abort(); report(ctx, "Setup cancellation requested; inspect partial changes before retry"); break;
           case "doctor": await doctor(ctx); break;
           case "doctor verify":
-            if (!ctx.hasUI || !await ctx.ui.confirm("Agent-assisted inspection?", "Uses your current model (may incur tokens) to request subagent action:list capabilities:true and action:doctor only. No child launches or writes. Results stay in the ordinary transcript; piStack does not persist a ready flag.")) break;
-            pi.sendUserMessage("piStack agent inspection only. Call subagent with {action:'list', capabilities:true, agentScope:'both'}, then {action:'doctor'}. Show the actual structured results for pistack.poteto-agent and pistack.comment-sicko including user/project overrides, disabled agents, child tools/skills and limitations. Do not launch any child, install, change configuration, or infer launch/auth readiness from a list. If subagent is unavailable, report unknown.");
+            if (!ctx.hasUI || !await ctx.ui.confirm("Agent-assisted inspection?", "Uses your current model (may incur tokens). If needed, permits subagents_enable({}) to activate deferred subagent tools for this session, then subagent action:list capabilities:true and action:doctor only. No child launches, installs or configuration writes. Results stay in the ordinary transcript; piStack does not persist a ready flag.")) break;
+            pi.sendUserMessage("piStack agent inspection only. If subagent is not active and subagents_enable is available, call subagents_enable({}) first. Activation permits inspection only, not delegation. Then call subagent with {action:'list', capabilities:true, agentScope:'both'}, then {action:'doctor'}. Show the actual structured results for pistack.poteto-agent, pistack.comment-sicko and pistack.analyst including user/project overrides, disabled agents, child tools/skills and limitations. Do not launch any child, install, change configuration, or infer launch/auth readiness from a list. If activation fails or the required tools are unavailable, report unknown. Do not bypass child boundaries or tool restrictions.");
             break;
           default: report(ctx, help);
         }

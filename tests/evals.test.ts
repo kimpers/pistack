@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { fixture } from "./fixtures.ts";
 import { summarizeTap } from "../evals/run.mjs";
+import { dependencyManifest } from "../pi/lib/setup.ts";
 
 test("eval bug-fix fixture executes expected red then green without confusing red with acceptance", () => {
   const f = fixture(); try {
@@ -33,7 +34,13 @@ test("release CI is manual approval-gated on both hosted platforms with candidat
   assert.match(workflow, /workflow_dispatch:/); assert.match(workflow, /default: false/);
   assert.match(workflow, /if: \$\{\{ inputs\.approve_provisioning \}\}/);
   for (const platform of ["macos-15", "ubuntu-24.04"]) assert.ok(workflow.includes(platform));
-  for (const version of ["26.0.0", "1.3.14", "0.85.1"]) assert.ok(workflow.includes(version));
+  for (const version of ["26.0.0", "1.3.14", dependencyManifest.piVersion]) assert.ok(workflow.includes(version));
+  assert.ok(workflow.includes(`@earendil-works/pi-coding-agent@${dependencyManifest.piVersion}`));
+  const installer = readFileSync("evals/installed-setup.ts", "utf8");
+  for (const dep of dependencyManifest.extensions.filter(d => d.required)) {
+    assert.ok(workflow.includes(`${dep.name} ${dep.version}`), dep.name);
+    assert.ok(installer.includes(`"${dep.name}@${dep.version}"`), dep.name);
+  }
   assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|schedule):|npm publish|git push|secrets\.|PI_SUBAGENT_CHILD:/m);
   assert.match(workflow, /evals\/installed-setup.ts/); assert.match(workflow, /bun run typecheck/);
   const f = fixture(); try {

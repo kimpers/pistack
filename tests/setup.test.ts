@@ -115,7 +115,7 @@ test("npm, git and local equivalents are detected without executing their resour
     installCore(f);
     const local = f.pkg(join(f.root, "local-subagents"), "pi-subagents", core[0].version);
     const git = f.pkg(join(f.paths.cwd, ".pi/git/github.com/nicobailon/pi-subagents"), "pi-subagents", core[0].version);
-    f.settings("project", { packages: [local, "git:github.com/nicobailon/pi-subagents@v0.66.0"] });
+    f.settings("project", { packages: [local, `git:github.com/nicobailon/pi-subagents@v${core[0].version}`] });
     const inspection = await inspectSetup(f.paths);
     assert.ok(inspection.rows.some(r => r.path === git));
     const p = buildProposal(f.paths, inspection, "project", inspection.config);
@@ -511,7 +511,7 @@ test("prerequisites inspect exact candidate versions without installing CLI/brow
     const commands: string[] = [];
     const result = await inspectPrerequisites(f.paths, config, async (command, args) => {
       commands.push(`${command} ${args.join(" ")}`);
-      return { code: command === "gh" ? 1 : 0, stdout: command === "node" ? "v22.18.0" : command === "pi" ? "0.85.1" : command === "agent-browser" ? "agent-browser 0.34.0" : "fixture version", stderr: "" };
+      return { code: command === "gh" ? 1 : 0, stdout: command === "node" ? "v22.18.0" : command === "pi" ? dependencyManifest.piVersion : command === "agent-browser" ? "agent-browser 0.34.0" : "fixture version", stderr: "" };
     });
     assert.equal(result.find(p => p.name.startsWith("Node"))!.ready, false);
     assert.equal(result.find(p => p.name.startsWith("Pi"))!.ready, true);
@@ -559,5 +559,15 @@ test("partial filters cannot masquerade as a ready dependency when its required 
     const i = await inspectSetup(f.paths);
     assert.ok(i.rows[0].extensions.some(e => e.enabled)); assert.ok(i.rows[0].extensions.some(e => !e.enabled));
     assert.match(buildProposal(f.paths, i, "user", i.config).conflicts.join("\n"), /partially filtered/);
+  } finally { f.cleanup(); }
+});
+
+for (const version of ["0.85.1", "1.1.1", "unknown"]) test(`prerequisites reject noncandidate Pi ${version} without changing the exact gate`, async () => {
+  const f = fixture(); try {
+    const config = (await inspectSetup(f.paths)).config;
+    const result = await inspectPrerequisites(f.paths, config, async command => ({ code: 0, stdout: command === "pi" ? version : "fixture", stderr: "" }));
+    const host = result.find(item => item.name.startsWith("Pi candidate"));
+    assert.deepEqual(host, { name: `Pi candidate ${dependencyManifest.piVersion}`, ready: false, requiredForInstall: true, detail: version });
+    assert.equal(existsSync(configPath(f.paths, "user")), false);
   } finally { f.cleanup(); }
 });

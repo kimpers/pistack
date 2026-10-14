@@ -209,6 +209,8 @@ test("portable audit uses exact Pi branch/native ownership evidence and never au
     const owned = report.rows.find((row: { path: string }) => row.path === f.path)!;
     assert.equal(owned.bucket, "review-owned", JSON.stringify(owned)); assert.equal(owned.session.entries, 2);
     assert.equal(owned.deletionAuthorized, false);
+    assert.equal(report.base, null);
+    assert.ok(report.rows.every((row: { ancestry: string }) => row.ancestry === "not-requested"));
     assert.equal(report.rows.find((row: { path: string }) => row.path === f.foreign)?.bucket, "hold");
     assert.ok(existsSync(f.foreign)); assert.deepEqual(readFileSync(f.owner.sessionFile), before);
     assert.equal(f.git(f.path, "status", "--porcelain"), "");
@@ -244,10 +246,274 @@ test("cleanup preserves tracked/untracked/ignored work and malformed transcript 
   } finally { f.cleanup(); }
 });
 
+function assertAuditCommands(calls: { cmd: string; args: string[] }[]) {
+  assert.ok(calls.some(call => call.cmd === "git" && call.args[2] === "worktree"));
+  for (const { cmd, args } of calls) {
+    assert.ok(["git", "lsof"].includes(cmd), cmd);
+    assert.ok(!args.some(arg => /^(fetch|pull|push|remove|prune|delete|kill|--delete|--force|-D)$/.test(arg)), JSON.stringify(args));
+    if (cmd === "git") assert.ok(["rev-parse", "worktree", "merge-base", "symbolic-ref", "status"].includes(args[2]), JSON.stringify(args));
+    if (args[2] === "worktree") assert.deepEqual(args.slice(2), ["worktree", "list", "--porcelain", "-z"]);
+  }
+}
+
+function auditBaseFixture() {
+  const f = cleanupFixture();
+  f.write(join(f.path, "tracked"), "owned commit\n");
+  f.git(f.path, "commit", "-am", "owned change");
+  f.owner.head = f.git(f.path, "rev-parse", "HEAD");
+  f.git(f.repo, "branch", "integration", f.owner.head);
+  const calls: { cmd: string; args: string[] }[] = [];
+  const run: typeof f.run = (cmd, args, cwd) => { calls.push({ cmd, args }); return f.run(cmd, args, cwd); };
+  return { ...f, calls, run };
+}
+
+test("audit explicit local base differs from main and ancestry never grants deletion", () => {
+  const f = auditBaseFixture(); try {
+    const selected = auditWorktrees(f.repo, f.evidence, { baseRef: "integration", run: f.run, now: f.now });
+    assert.deepEqual(selected.base, { ref: "integration", sha: f.owner.head });
+    const owned = selected.rows.find((row: { path: string }) => row.path === f.path);
+    assert.equal(owned.ancestry, "ancestor"); assert.equal(owned.bucket, "review-owned");
+    assert.equal(owned.session.entries, 2); assert.equal(owned.runId, "native-run-1");
+    assert.ok(selected.rows.every((row: { ancestry: string; deletionAuthorized: boolean }) => row.ancestry === "ancestor" && row.deletionAuthorized === false));
+    assert.equal(selected.rows.find((row: { path: string }) => row.path === f.foreign).bucket, "hold");
+    const main = auditWorktrees(f.repo, f.evidence, { baseRef: "main", run: f.run, now: f.now });
+    const unmerged = main.rows.find((row: { path: string }) => row.path === f.path);
+    assert.equal(unmerged.ancestry, "not-ancestor"); assert.equal(unmerged.bucket, "review-owned");
+    assert.equal(unmerged.deletionAuthorized, false);
+    const beforeOmitted = f.calls.length;
+    const omitted = auditWorktrees(f.repo, f.evidence, { run: f.run, now: f.now });
+    assert.equal(omitted.base, null);
+    assert.ok(omitted.rows.every((row: { ancestry: string }) => row.ancestry === "not-requested"));
+    assert.ok(f.calls.slice(beforeOmitted).every(call => call.args[2] !== "merge-base" && !call.args.includes("--verify")));
+    assertAuditCommands(f.calls);
+  } finally { f.cleanup(); }
+});
+
+test("audit rejects missing and noncommit local bases before inventory", () => {
+  const f = auditBaseFixture(); try {
+    const blob = f.git(f.repo, "rev-parse", "HEAD:tracked"), tree = f.git(f.repo, "rev-parse", "HEAD^{tree}");
+    for (const baseRef of ["missing", "origin/missing", blob, tree, "", "--all", "main\0other"]) {
+      f.calls.length = 0;
+      assert.throws(() => auditWorktrees(f.repo, f.evidence, { baseRef, run: f.run, now: f.now }), /base/i, baseRef);
+      assert.ok(f.calls.every(call => call.cmd === "git" && call.args[2] === "rev-parse"), JSON.stringify(f.calls));
+    }
+    for (const result of [
+      { status: 128, stdout: "", stderr: "missing" },
+      { status: 0, stdout: `${f.owner.head}\n`, stderr: "warning" },
+      { status: 0, stdout: "not-a-sha\n", stderr: "" },
+      { status: 0, stdout: `${f.owner.head}\n${f.owner.head}\n`, stderr: "" },
+      { status: null, stdout: "", stderr: "", error: new Error("ENOENT") },
+    ]) {
+      assert.throws(() => auditWorktrees(f.repo, f.evidence, { baseRef: "integration", now: f.now,
+        run: () => result }), /base/i);
+    }
+  } finally { f.cleanup(); }
+});
+
+test("audit freezes the resolved commit once even if the input branch moves", () => {
+  const f = auditBaseFixture(); try {
+    const report = auditWorktrees(f.repo, f.evidence, { baseRef: "integration", now: f.now,
+      run: (cmd: string, args: string[], cwd: string) => {
+        if (args[2] === "worktree") f.git(f.repo, "branch", "-f", "integration", "main");
+        return f.run(cmd, args, cwd);
+      } });
+    assert.deepEqual(report.base, { ref: "integration", sha: f.owner.head });
+    assert.notEqual(f.git(f.repo, "rev-parse", "integration"), f.owner.head);
+    assert.equal(report.rows.find((row: { path: string }) => row.path === f.path).ancestry, "ancestor");
+    const resolutions = f.calls.filter(call => call.args.includes("--verify"));
+    assert.deepEqual(resolutions, [{ cmd: "git", args: ["-C", f.repo, "rev-parse", "--verify", "--end-of-options", "integration^{commit}"] }]);
+    assert.deepEqual(f.calls.filter(call => call.args[2] === "merge-base").map(call => call.args),
+      report.rows.map((row: { head: string }) => ["-C", f.repo, "merge-base", "--is-ancestor", row.head, f.owner.head]));
+    assertAuditCommands(f.calls);
+  } finally { f.cleanup(); }
+});
+
+test("audit ancestry command failures are unknown and held, not false", () => {
+  const f = auditBaseFixture(); try {
+    const failures = [
+      { status: 128, stdout: "", stderr: "missing object" },
+      { status: 2, stdout: "", stderr: "" },
+      { status: 1, stdout: "", stderr: "permission denied" },
+      { status: 0, stdout: "", stderr: "warning" },
+      { status: 0, stdout: "unexpected", stderr: "" },
+      { status: null, stdout: "", stderr: "", error: new Error("ENOENT") },
+      { status: null, stdout: "", stderr: "", signal: "SIGTERM" },
+    ];
+    for (const failure of failures) {
+      const report = auditWorktrees(f.repo, f.evidence, { baseRef: "integration", now: f.now,
+        run: (cmd: string, args: string[], cwd: string) => {
+          const result = f.run(cmd, args, cwd);
+          return args[2] === "merge-base" && args[4] === f.owner.head ? failure : result;
+        } });
+      const owned = report.rows.find((row: { path: string }) => row.path === f.path);
+      assert.equal(owned.ancestry, "unknown"); assert.equal(owned.bucket, "hold");
+      assert.match(owned.reasons.join("\n"), /ancestry.*unknown/i);
+      assert.equal(owned.session.entries, 2, "ancestry failure must not skip ownership evidence");
+      assert.equal(owned.deletionAuthorized, false);
+      assert.equal(report.rows.find((row: { path: string }) => row.path === f.foreign).ancestry, "ancestor");
+    }
+    const thrown = auditWorktrees(f.repo, f.evidence, { baseRef: "integration", now: f.now,
+      run: (cmd: string, args: string[], cwd: string) => {
+        if (args[2] === "merge-base") throw new Error("injected command failure");
+        return f.run(cmd, args, cwd);
+      } });
+    assert.ok(thrown.rows.every((row: { ancestry: string; bucket: string }) => row.ancestry === "unknown" && row.bucket === "hold"));
+    assertAuditCommands(f.calls);
+  } finally { f.cleanup(); }
+});
+
+test("audit ancestry remains independent of ownership, ignored files and changed receipts", () => {
+  const f = auditBaseFixture(); try {
+    f.write(join(f.repo, ".git/info/exclude"), "scratch\n"); f.write(join(f.path, "scratch"), "preserve me");
+    f.write(f.owner.checkpoint.path, "changed receipt");
+    const report = auditWorktrees(f.repo, f.evidence, { baseRef: "integration", run: f.run, now: f.now });
+    const owned = report.rows.find((row: { path: string }) => row.path === f.path);
+    assert.equal(owned.ancestry, "ancestor"); assert.equal(owned.bucket, "hold");
+    assert.match(owned.reasons.join("\n"), /ignored/); assert.match(owned.reasons.join("\n"), /hash changed/);
+    assert.ok(report.rows.every((row: { ancestry: string; deletionAuthorized: boolean }) => row.ancestry === "ancestor" && row.deletionAuthorized === false));
+    const stale = auditWorktrees(f.repo, { ...f.evidence, observedAt: new Date(f.now - 300001).toISOString() }, { baseRef: "main", run: f.run, now: f.now });
+    const staleOwned = stale.rows.find((row: { path: string }) => row.path === f.path);
+    assert.equal(staleOwned.ancestry, "not-ancestor"); assert.equal(staleOwned.bucket, "hold");
+    assert.equal(readFileSync(join(f.path, "scratch"), "utf8"), "preserve me");
+    assertAuditCommands(f.calls);
+  } finally { f.cleanup(); }
+});
+
+test("audit CLI accepts only the documented optional base and blocks invalid refs", () => {
+  const f = auditBaseFixture(); try {
+    const envelope = join(f.root, "audit-input.json"); f.write(envelope, f.evidence);
+    const cli = (...args: string[]) => spawnSync("bash", ["pstack/skills/poteto-mode/scripts/worktree-audit.sh", ...args], { encoding: "utf8" });
+    for (const baseRef of ["integration", f.owner.head]) {
+      const result = cli("--base", baseRef, f.repo, envelope);
+      assert.equal(result.status, 0, result.stderr);
+      const report = JSON.parse(result.stdout);
+      assert.deepEqual(report.base, { ref: baseRef, sha: f.owner.head });
+      assert.equal(report.rows.find((row: { path: string }) => row.path === f.path).ancestry, "ancestor");
+      assert.ok(report.rows.every((row: { deletionAuthorized: boolean }) => row.deletionAuthorized === false));
+    }
+    for (const args of [[], [f.repo], [f.repo, envelope, "extra"], ["--base"], ["--base", "integration", f.repo],
+      ["--base", "", f.repo, envelope], ["--base", "--help", f.repo, envelope], ["--base", "main", "--base", "integration", f.repo, envelope],
+      ["--unknown", f.repo, envelope], ["-b", "integration", f.repo, envelope], [f.repo, envelope, "--help"], [f.repo, envelope, "--base", "main"]]) {
+      const result = cli(...args); assert.equal(result.status, 2, JSON.stringify({ args, result }));
+      assert.match(result.stdout + result.stderr, /Usage: worktree-audit.sh \[--base REF\]/);
+    }
+    const help = cli("--help"); assert.equal(help.status, 0); assert.match(help.stdout, /local.*commit/i);
+    for (const baseRef of ["missing", f.git(f.repo, "rev-parse", "HEAD:tracked")]) {
+      const result = cli("--base", baseRef, f.repo, envelope);
+      assert.equal(result.status, 1); assert.equal(result.stdout, ""); assert.match(result.stderr, /Audit blocked:.*base/i);
+    }
+    assert.ok(existsSync(f.path)); assert.ok(existsSync(f.foreign));
+  } finally { f.cleanup(); }
+});
+
 test("native notifications remain the only child wakeup; pause guidance is not a second goal executor", () => {
   const runtime = readFileSync("pi/references/runtime.md", "utf8"), extension = readFileSync("pi/extensions/pistack.ts", "utf8");
   for (const phrase of ["Native pi-subagents completion notifications", "sole explicit autonomous continuation owner", "/goal pause", "Keep unrelated/shared workers", "Mode on never creates a goal"]) assert.ok(runtime.includes(phrase), phrase);
   assert.doesNotMatch(extension, /setInterval|create_goal\(|update_goal\(|worktree\.cleanup/);
   const audit = readFileSync("pi/lib/worktree-cleanup.mjs", "utf8");
   assert.doesNotMatch(audit, /unlinkSync|rmSync|process\.kill|git fetch|worktree", "remove/);
+});
+
+function reviewPage(pageInfo: unknown, nodes: unknown[] = []) {
+  return { data: { repository: { pullRequest: { reviewThreads: { nodes, pageInfo } } } } };
+}
+
+function reviewGhFixture() {
+  const f = fixture(), oldPath = process.env.PATH;
+  const gh = join(f.root, "bin/gh"), input = join(f.root, "input.json"), calls = join(f.root, "calls.jsonl");
+  const started = join(f.root, "started"), stopping = join(f.root, "stopping"), stopped = join(f.root, "stopped");
+  f.write(calls, "");
+  f.write(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
+const input = JSON.parse(fs.readFileSync(${JSON.stringify(input)}, 'utf8'));
+const query = args.find(arg => arg.startsWith('query=')) || '';
+if (args[0] === 'pr' && args[1] === 'view') {
+  process.stdout.write(JSON.stringify(input.facts));
+} else if (args[0] === 'pr' && args[1] === 'checks') {
+  process.stdout.write(JSON.stringify([{name:'ci',state:'SUCCESS',bucket:'pass'}]));
+} else if (query.includes('query ReviewThreads')) {
+  if (!query.includes('reviewThreads(first: 100, after: $after)') || !query.includes('pageInfo')) process.exit(9);
+  const cursor = args.find(arg => arg.startsWith('after='));
+  if (cursor && input.hang) {
+    process.once('SIGTERM', () => {
+      fs.writeFileSync(${JSON.stringify(stopping)}, 'stopping');
+      setTimeout(() => { fs.writeFileSync(${JSON.stringify(stopped)}, 'settled'); process.exit(0); }, 150);
+    });
+    fs.writeFileSync(${JSON.stringify(started)}, 'started');
+    setInterval(() => {}, 1000);
+  } else {
+    if (cursor && cursor !== 'after=next') process.exit(10);
+    process.stdout.write(JSON.stringify(cursor ? input.second : input.first));
+  }
+} else if (query.includes('query PrCommitStatuses')) {
+  process.stdout.write(JSON.stringify({data:{repository:{pullRequest:{commits:{nodes:[{commit:{oid:'head',statusCheckRollup:{state:'SUCCESS'}}}]}}}}}));
+} else process.exit(11);
+`);
+  chmodSync(gh, 0o755);
+  process.env.PATH = `${join(f.root, "bin")}:${oldPath}`;
+  return { ...f, input, calls, started, stopping, stopped,
+    commands: (): string[][] => readFileSync(calls, "utf8").trim().split("\n").filter(Boolean).map(line => JSON.parse(line)),
+    cleanup: () => { if (oldPath === undefined) delete process.env.PATH; else process.env.PATH = oldPath; f.cleanup(); },
+  };
+}
+
+test("actual GitHub review pages block later threads and malformed later pagination without READY", async () => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    const first = reviewPage({ hasNextPage: true, endCursor: "next" }, [{ id: "resolved", isResolved: true, comments: { nodes: [] } }]);
+    for (const scenario of [
+      { second: reviewPage({ hasNextPage: false, endCursor: null }, [{ id: "late", isResolved: false, comments: { nodes: [] } }]), exit: 3, diagnostic: "review-threads" },
+      { second: reviewPage(undefined), exit: 7, diagnostic: "pageInfo" },
+      { second: reviewPage({ hasNextPage: true, endCursor: null }), exit: 7, diagnostic: "endCursor" },
+      { second: reviewPage({ hasNextPage: true, endCursor: "" }), exit: 7, diagnostic: "endCursor" },
+      { second: reviewPage({ hasNextPage: "false", endCursor: null }), exit: 7, diagnostic: "hasNextPage" },
+      { second: reviewPage({ hasNextPage: true, endCursor: "next" }), exit: 7, diagnostic: "repeated a cursor" },
+    ]) {
+      f.write(f.calls, ""); f.write(f.input, { facts, first, second: scenario.second });
+      const r = runtime();
+      const result = await runSimple({ dependencies: { ...r.dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+      assert.equal(result.kind, "BLOCKER"); assert.equal(result.exitCode, scenario.exit);
+      assert.match(JSON.stringify(result), new RegExp(scenario.diagnostic));
+      if (scenario.exit === 3) {
+        assert.match(JSON.stringify(result), /"id":"late"/);
+        assert.equal(f.commands().length, 6);
+      } else assert.equal(f.commands().length, 3, "no checks query after invalid second page");
+      const pages = f.commands().filter(args => args.some(arg => arg.includes("query ReviewThreads")));
+      assert.equal(pages.length, 2);
+      assert.deepEqual(pages[0].slice(-6), ["-f", "owner=fixture", "-f", "repo=fixture", "-F", "pr=1"]);
+      assert.deepEqual(pages[1].slice(-2), ["-f", "after=next"]);
+    }
+  } finally { f.cleanup(); }
+});
+
+test("actual paginated GitHub cancellation waits for subprocess close and never queries checks or returns READY", async () => {
+  const f = reviewGhFixture(), controller = new AbortController();
+  const wait = async (path: string) => {
+    for (let i = 0; i < 200 && !existsSync(path); i++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.ok(existsSync(path), path);
+  };
+  let settled = false;
+  try {
+    f.write(f.input, {
+      facts: await fakeReader().pullRequest(context),
+      first: reviewPage({ hasNextPage: true, endCursor: "next" }), hang: true,
+    });
+    const reader = new GhGitHubReader(controller.signal), r = runtime();
+    const running = runSimple({ dependencies: { ...r.dependencies, reader, signal: controller.signal }, contexts: [context], mode: "single", statusOnly: false, options });
+    running.then(() => { settled = true; }, () => { settled = true; });
+    const rejected = assert.rejects(running, /abort/i);
+    await wait(f.started); controller.abort(); await wait(f.stopping);
+    assert.equal(settled, false, "SIGTERM notification is not subprocess settlement");
+    await rejected;
+    assert.equal(readFileSync(f.stopped, "utf8"), "settled");
+    assert.equal(settled, true);
+    assert.equal(f.commands().length, 3);
+    assert.deepEqual(f.commands()[2].slice(-2), ["-f", "after=next"]);
+    assert.deepEqual(r.events, []);
+    await assert.rejects(reader.reviewThreadPage(context, "next"), /abort/i);
+    assert.equal(f.commands().length, 3, "aborted reader must not spawn another query");
+  } finally { controller.abort(); f.cleanup(); }
 });

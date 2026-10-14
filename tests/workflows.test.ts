@@ -59,7 +59,7 @@ test("delegation contracts preserve panels, independent output, joins and failur
   const config = defaultModels(); config.concurrency = 2;
   for (const role of ["arena runners", "arena cross-judge pool", "architect runners", "interrogate reviewers"] as const) {
     const panel = resolveRole(config, role, ["fixture/model"], { provider: "fixture", id: "model" });
-    assert.equal(panel.models.length, 3); assert.equal(panel.concurrency, 2); assert.equal(panel.distinctModels, 1);
+    assert.equal(panel.models.length, 2); assert.equal(panel.concurrency, 2); assert.equal(panel.distinctModels, 1);
     assert.match(panel.diversity, /not multi-model diversity/);
     const saved = JSON.parse(JSON.stringify(config)); saved.roles[role] = ["inherit", "fixture/model", "inherit", "fixture/model"];
     const existing = resolveRole(parseModels(saved), role, ["fixture/model"], { provider: "fixture", id: "model" });
@@ -169,4 +169,35 @@ test("refreshed task starts, evidence labels and differential status retain expl
   assert.match(delegation, /including in `runs.run`\/`runs.all` items/);
   assert.match(delegation, /not a top-level `thinking` field/);
   assert.match(read("pi/references/runtime.md"), /call `pistack_models` again immediately before dispatch/);
+});
+
+test("refresh retains verified checkpoints, fresh queue owners and guarded green-head reuse", () => {
+  for (const name of ["autopilot-full", "autopilot-stack"]) {
+    const body = playbook(name);
+    for (const phrase of ["every hour", "finite interactive-shell", "verified-unit boundary", "explicit publication authority", "Expected-red", "confirm settlement"]) assert.ok(body.toLowerCase().includes(phrase.toLowerCase()), `${name}: ${phrase}`);
+    assert.doesNotMatch(body, /roughly every 30 minutes|WIP commit is fine/);
+  }
+  const full = playbook("autopilot-full");
+  for (const phrase of ["fresh owner takes the next item", "returns", "merge-prep rebase", "CI must pass at that exact head", "git merge-tree", "CI-selection", "unknown", "Shipping's stricter per-lane", "rebase and reverify"]) assert.ok(full.includes(phrase), phrase);
+  assert.match(playbook("multi-phase-plan"), /hourly/);
+});
+
+test("portable refresh behavior survives Pi adaptation rather than only conflict removal", () => {
+  const verify = read("pstack/skills/create-verification-skill/SKILL.md");
+  for (const phrase of ["empty data dir", "migrations and seed data", "Never weaken the journey", "stand-in", "stay unverified"]) assert.ok(verify.includes(phrase), phrase);
+  const perf = playbook("perf-issue");
+  for (const phrase of ["benchmark-checklist", "Don't do it.", "Do it, but don't do it again.", "Do it less.", "Do it later.", "Do it when they're not looking.", "Do it concurrently.", "Do it cheaper.", "When an earlier mantra meets the target, stop"]) assert.ok(perf.includes(phrase), phrase);
+  const hill = playbook("hillclimb");
+  for (const phrase of ["before you freeze it", "error count", "count of the work done", "Borrow only their order, not that step's stop rule", "canonical `decisions.tsv`"]) assert.ok(hill.includes(phrase), phrase);
+  const flags = read("pstack/skills/architect/references/design-red-flags.md");
+  for (const heading of ["Split ownership", "Two ways to do one task", "Importable internals", "Hand-synced list"]) assert.ok(flags.includes(`## ${heading}`), heading);
+  const patterns = read("pstack/skills/typescript-best-practices/references/patterns.md");
+  assert.match(patterns, /\.parse\(/); assert.match(patterns, /satisfies/);
+  assert.match(playbook("opening-a-pr"), /`## What changed`/); assert.match(playbook("opening-a-pr"), /`## Scope`: always/);
+  assert.equal([...playbook("opening-a-pr").matchAll(/^\*\*Readiness\.\*\*/gm)].length, 1);
+  const why = read("pstack/skills/why/SKILL.md");
+  for (const category of ["Source control", "Issue / ticket tracker", "Long-form documents", "Real-time team chat", "Infrastructure observability", "Error / exception tracking", "Product analytics warehouse"]) assert.ok(why.includes(category), category);
+  const epistemics = read("pstack/skills/why/references/epistemics.md");
+  assert.deepEqual([...epistemics.matchAll(/^### \d\. (.+)$/gm)].map(m => m[1]), ["Direct", "Supported", "Inferred", "Speculative", "Unknown"]);
+  assert.match(epistemics, /Contradict/i); assert.match(why, /unavailable|gap/);
 });

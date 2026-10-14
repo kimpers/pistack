@@ -27,7 +27,7 @@ test("actual Pi loader exposes every selected direct skill, hides principle leav
     await loader.reload();
     const { skills, diagnostics } = loader.getSkills();
     assert.deepEqual(diagnostics, []);
-    assert.equal(skills.length, 48);
+    assert.equal(skills.length, 54);
     const catalog = new Map(skills.map(s => [s.name, s]));
     for (const path of entries) {
       const name = /\/([^/]+)\/SKILL.md$/.exec(path)![1];
@@ -37,7 +37,7 @@ test("actual Pi loader exposes every selected direct skill, hides principle leav
       assert.ok(body.includes(integration), `Direct ${name} loads shared policy without requiring mode`);
       assert.equal(skill.disableModelInvocation, !["setup-pstack", "deslop"].includes(name));
     }
-    assert.equal(skills.filter(s => s.name.startsWith("principle-")).length, 23);
+    assert.equal(skills.filter(s => s.name.startsWith("principle-")).length, 24);
     assert.ok(catalog.get("verify-fixture")!.filePath.includes(".pi/skills/verify-fixture"));
     for (const absent of ["make-bot-ui", "setup-benny", "triage-issue-reports", "pistack-foundation"]) assert.equal(catalog.has(absent), false);
   } finally { f.cleanup(); }
@@ -106,7 +106,7 @@ test("Bugbot prose paths resolve from the declared skill base, including generat
 });
 
 test("active instructions reject obsolete tool/model/cloud/path and unsafe cleanup recipes", () => {
-  const forbidden = /\/loop\b|\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:/m;
+  const forbidden = /\/loop\b|\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:|^<<<<<<< |^=======\s*$|^>>>>>>> |`generalPurpose`|`readonly: false`/m;
   for (const file of activeMarkdown) assert.doesNotMatch(read(file), forbidden, file);
   for (const poison of ["`/loop`", "`Task`", "environment: \"cloud\"", "git reset --hard", "paths: [x]", "~/.cursor/skills/x"]) assert.match(poison, forbidden);
   assert.match(read("pi/references/integration.md"), /Explicit task limits and harness permissions override/);
@@ -117,12 +117,12 @@ test("portable principle bodies and review rubrics are retained, with only appro
   const adapted = new Set(["principle-build-the-lever", "principle-encode-lessons-in-structure", "principle-never-block-on-the-human", "principle-sequence-verifiable-units"]);
   for (const entry of entries.filter(p => p.includes("/principle-"))) {
     const name = entry.split("/").at(-2)!; if (adapted.has(name)) continue;
-    const original = execFileSync("git", ["show", `c47b12849e43f18d5c374c7069c744cc55b0ea00:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
+    const original = execFileSync("git", ["show", `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
     assert.equal(read(entry).replace(`\n\n${integration}\n`, ""), original, name);
   }
   for (const path of ["interrogate/references/code-quality-review.md", "interrogate/references/lead-judgment.md", "why/references/epistemics.md", "typescript-best-practices/references/patterns.md"]) {
     const file = `pstack/skills/${path}`;
-    assert.equal(read(file), execFileSync("git", ["show", `c47b12849e43f18d5c374c7069c744cc55b0ea00:${file}`], { cwd: root, encoding: "utf8" }), file);
+    assert.equal(read(file), execFileSync("git", ["show", `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454:${file}`], { cwd: root, encoding: "utf8" }), file);
   }
   assert.match(read("pstack/skills/deslop/LICENSE"), /Copyright \(c\) 2026 Cursor/);
   assert.match(read("pstack/skills/deslop/SKILL.md"), /cursor-team-kit at `93b00b89/);
@@ -137,4 +137,31 @@ test("packaged child skills point to original sources and no profile widens ambi
   }
   assert.match(read("pi/agents/profiles/analyst.md"), /^tools: read, grep, find, ls$/m);
   assert.match(read("pi/agents/profiles/comment-sicko.md"), /parent must accept and fix the root cause before removing a correctness suppression/);
+});
+
+test("0.15.23 additions use direct Pi resources and bounded read-only help and recap", () => {
+  for (const name of ["benchmark-checklist", "correct", "in-your-own-words", "ketchup", "poteto-help", "principle-explain-the-number"]) {
+    assert.ok(entries.includes(`./pstack/skills/${name}/SKILL.md`), name);
+    assert.match(read(`pstack/skills/${name}/SKILL.md`), /disable-model-invocation: true/);
+  }
+  const help = read("pstack/skills/poteto-help/SKILL.md");
+  for (const phrase of ["/pistack setup", "/pistack on", "/skill:poteto-mode", "one-pass", "`check`", "`drive`", "allowlist", "bundled", "deslop", "Benny and make-bot-ui remain unavailable", "don't start the work"]) assert.ok(help.includes(phrase), phrase);
+  for (const path of ["SKILL.md", "references/prompting.md", "references/recipes.md"]) {
+    const text = read(`pstack/skills/poteto-help/${path}`);
+    assert.doesNotMatch(text, /cursor\/plugins\/blob\/main|docs\/guide|Custom Mode|\/visualize|\[[^\]\n]*make-bot-ui[^\]\n]*\]\(/);
+  }
+  const recap = read("pstack/skills/ketchup/SKILL.md");
+  for (const phrase of ["selected ancestry", "last actual user message", "native run status", "under 250 words", "No screenshot yet", "read-only", "before their last message"]) assert.ok(recap.includes(phrase), phrase);
+  assert.match(read("pstack/skills/in-your-own-words/SKILL.md"), /does not authorize execution or enable persistent mode/);
+});
+
+test("measurement and correction skills retain proof and authority boundaries", () => {
+  const benchmark = read("pstack/skills/benchmark-checklist/SKILL.md");
+  assert.deepEqual([...benchmark.matchAll(/^(\d+)\. /gm)].map(m => Number(m[1])), [1, 2, 3, 4, 5, 6, 7]);
+  for (const phrase of ["at least 5 times", "alternating", "median and range", "inconclusive", "questions 4 and 7", "sysctl -n hw.ncpu", "Never stop unrelated processes"]) assert.ok(benchmark.includes(phrase), phrase);
+  const correct = read("pstack/skills/correct/SKILL.md");
+  for (const phrase of ["happened twice", "architecture", "types", "lint", "behavior", "real past mistake", "authorized repository and change scope", "explicit approval", "instruction file"]) assert.ok(correct.includes(phrase), phrase);
+  assert.doesNotMatch(correct, /one commit each|Repeat this each time|File each Backlog/);
+  const number = read("pstack/skills/principle-explain-the-number/SKILL.md");
+  assert.match(number, /benchmark-checklist/);
 });

@@ -40,7 +40,7 @@ export function sessionEvidence(path, expected) {
     limitation: "Selected archival branch only; transcript content and assistant stopReason do not prove native run settlement." };
 }
 const command = (name, args, cwd) => spawnSync(name, args, { cwd, encoding: "utf8", timeout: 30_000, maxBuffer: 4 * 1024 * 1024,
-  env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } });
+  env: { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1" } });
 function output(result, label) {
   if (result.error || result.signal || result.status !== 0 || result.stderr?.trim()) throw new Error(`${label} unavailable/error; state unknown`);
   return result.stdout;
@@ -52,9 +52,17 @@ function preserved(evidence, worktrees) {
   if (createHash("sha256").update(readBounded(evidence.path)).digest("hex") !== evidence.sha256) throw new Error("preserved evidence hash changed");
   return path;
 }
-export function auditWorktrees(repo, evidence, { run = command, now = Date.now() } = {}) {
+const commitId = value => typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value);
+export function auditWorktrees(repo, evidence, { baseRef, run = command, now = Date.now() } = {}) {
   repo = realpathSync(repo);
   const git = (cwd, ...args) => output(run("git", ["-C", cwd, ...args], repo), `git ${args[0]}`);
+  let base = null;
+  if (baseRef !== undefined) {
+    if (typeof baseRef !== "string" || !baseRef.trim() || baseRef.startsWith("-") || baseRef.includes("\0")) throw new Error("base must name a local commit/ref");
+    const sha = output(run("git", ["-C", repo, "rev-parse", "--verify", "--end-of-options", `${baseRef}^{commit}`], repo), "base resolution").trim();
+    if (!commitId(sha)) throw new Error("base did not resolve to one commit ID");
+    base = { ref: baseRef, sha };
+  }
   const records = git(repo, "worktree", "list", "--porcelain", "-z").split("\0\0").filter(Boolean).map(block => {
     const fields = block.split("\0"); const path = fields.find(f => f.startsWith("worktree "))?.slice(9);
     if (!path || !isAbsolute(path)) throw new Error("unparseable Git worktree inventory");
@@ -66,7 +74,16 @@ export function auditWorktrees(repo, evidence, { run = command, now = Date.now()
     iso(evidence.observedAt) && now >= Date.parse(evidence.observedAt) && now - Date.parse(evidence.observedAt) <= 300000 &&
     Array.isArray(evidence.worktrees) && evidence.worktrees.length <= 1000;
   const rows = records.map((wt, index) => {
-    const reasons = []; let session = null, processes = "unknown";
+    const reasons = []; let session = null, processes = "unknown", ancestry = "not-requested";
+    if (base) {
+      ancestry = "unknown";
+      try {
+        if (!commitId(wt.head)) throw new Error("missing Git head");
+        const result = run("git", ["-C", repo, "merge-base", "--is-ancestor", wt.head, base.sha], repo);
+        if (result.error || result.signal || result.stderr?.trim() || result.stdout?.trim() || ![0, 1].includes(result.status)) throw new Error("Git ancestry command failed");
+        ancestry = result.status === 0 ? "ancestor" : "not-ancestor";
+      } catch { reasons.push("Git ancestry query unavailable/error; state unknown"); }
+    }
     if (index === 0 || wt.path === repo) reasons.push("primary/requested worktree is excluded");
     if (wt.locked) reasons.push("locked/prunable worktree");
     const owners = validEnvelope ? evidence.worktrees.filter(row => row?.path === wt.path) : [];
@@ -88,17 +105,22 @@ export function auditWorktrees(repo, evidence, { run = command, now = Date.now()
       else { processes = "visible activity or ambiguous lsof output"; reasons.push(processes); }
       if (git(path, "rev-parse", "HEAD").trim() !== wt.head || git(path, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching")) reasons.push("Git state changed during audit");
     } catch (error) { reasons.push(error.message); }
-    return { ...wt, bucket: reasons.length ? "hold" : "review-owned", reasons, runId: owner?.runId ?? null, session, processes, deletionAuthorized: false };
+    return { ...wt, ancestry, bucket: reasons.length ? "hold" : "review-owned", reasons, runId: owner?.runId ?? null, session, processes, deletionAuthorized: false };
   });
-  return { version: 1, repo, taskId: validEnvelope ? evidence.taskId : null, observedAt: new Date(now).toISOString(), rows,
+  return { version: 1, repo, base, taskId: validEnvelope ? evidence.taskId : null, observedAt: new Date(now).toISOString(), rows,
     limitations: ["Read-only point-in-time audit, not deletion authority or a cleanup plan executor.", "Caller-supplied native settlement references need operator review; file hashes do not authenticate a tool result.", "lsof visibility is supporting evidence only; no process is killed. No fetch, force removal, session/cache sweep or ownership registry."] };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.length !== 4 || process.argv.includes("--help")) {
-    process.stdout.write("Usage: worktree-audit.sh <repo> <owned-evidence.json>\nRead-only; no deletion or installs. See pi/references/runtime.md.\n");
-    process.exitCode = process.argv.includes("--help") ? 0 : 2;
+  const args = process.argv.slice(2), hasBase = args[0] === "--base";
+  const baseRef = hasBase ? args[1] : undefined;
+  const paths = hasBase ? args.slice(2) : args;
+  const help = args.length === 1 && args[0] === "--help";
+  if (help || paths.length !== 2 || paths.some(arg => !arg || arg.startsWith("-")) ||
+      (hasBase && (!baseRef?.trim() || baseRef.startsWith("-")))) {
+    process.stdout.write("Usage: worktree-audit.sh [--base REF] <repo> <owned-evidence.json>\nOptional base must resolve locally to a commit; resolved once, never fetched or guessed.\nRead-only; no deletion, process termination or installs. See pi/references/runtime.md.\n");
+    process.exitCode = help ? 0 : 2;
   } else {
-    try { process.stdout.write(`${JSON.stringify(auditWorktrees(process.argv[2], JSON.parse(readBounded(process.argv[3]).toString("utf8"))), null, 2)}\n`); }
+    try { process.stdout.write(`${JSON.stringify(auditWorktrees(paths[0], JSON.parse(readBounded(paths[1]).toString("utf8")), { baseRef }), null, 2)}\n`); }
     catch (error) { process.stderr.write(`Audit blocked: ${error.message}\n`); process.exitCode = 1; }
   }
 }

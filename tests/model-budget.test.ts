@@ -35,6 +35,27 @@ test("unlimited and inherited aliases preserve configured/native effort without 
   const plain = { ...config, thinking: undefined };
   assert.equal(resolveRole(proposeBudget(plain, "unlimited", []).config, "bug-fix", [id], sparseModel).runs[0].selector, id);
 });
+for (const entries of [[id], [id, "inherit", id], ["inherit", id, id, "inherit", id]]) test(`unlimited preserves saved ${entries.length}-seat panels and rejects discovery or effort drift`, () => {
+  const config = defaultModels();
+  config.concurrency = 7;
+  config.budget = "medium";
+  config.thinking = { [id]: "high" };
+  for (const role of ["arena runners", "arena cross-judge pool", "architect runners", "interrogate reviewers"] as const) {
+    config.roles[role] = [...entries];
+    const before = structuredClone(config);
+    const proposal = proposeBudget(config, "unlimited", [sparseModel]);
+    assert.deepEqual(proposal, { config: { ...before, budget: "unlimited" }, changes: [], errors: [] });
+    assert.deepEqual(config, before);
+    const panel = resolveRole(proposal.config, role, [id, "parent/current"], { provider: "parent", id: "current" }, [sparseModel]);
+    assert.deepEqual(panel.runs.map(run => run.selector), entries.map(entry => entry === "inherit" ? "parent/current" : `${id}:high`));
+    assert.equal(panel.concurrency, 7);
+    assert.equal(panel.budget, "unlimited");
+    assert.throws(() => resolveRole(proposal.config, role, ["parent/current"], { provider: "parent", id: "current" }, [sparseModel]), /Unavailable model/);
+    assert.throws(() => resolveRole(proposal.config, role, [id, "parent/current"], { provider: "parent", id: "current" }, [{ ...sparseModel, thinkingLevelMap: { high: null } }]), /Unsupported or unknown thinking high/);
+    assert.deepEqual(config, before);
+  }
+});
+
 test("public SDK custom-model registry agrees on reasoning support and consumes exact selector suffixes", async () => {
   const f = fixture(); try {
     const models = [sparseModel, { id: "plain", reasoning: false }, { id: "defaults", reasoning: true }, { id: "extended", reasoning: true, thinkingLevelMap: { xhigh: "xhigh", off: null } }];

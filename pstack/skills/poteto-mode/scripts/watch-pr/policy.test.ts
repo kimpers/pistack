@@ -10,6 +10,7 @@ import {
   queryBackoffSeconds,
   readSnapshot,
   runQueued,
+  runSimple,
   selectTierMajorStackDecision,
 } from "./policy.ts";
 import {
@@ -106,7 +107,7 @@ describe("snapshot query planning", () => {
     expect(snapshot.ci.kind).toBe("ci-pending");
     expect(reader.calls).toEqual([
       "pullRequest",
-      "reviewThreads",
+      "reviewThreadPage:null",
       "checksFastPath",
       "pullRequest",
     ]);
@@ -422,4 +423,83 @@ it("uses the specified retry floor and cap", () => {
   expect(queryBackoffSeconds(1, 1)).toBe(60);
   expect(queryBackoffSeconds(1, 2)).toBe(120);
   expect(queryBackoffSeconds(60, 4)).toBe(300);
+});
+
+describe("paginated review readiness", () => {
+  const pr = context(1);
+  const run = (reader: GitHubReader, signal?: AbortSignal) => runSimple({
+    dependencies: {
+      reader, signal,
+      clock: { now: () => 0, observedAt: () => "now", sleep: async () => { throw new Error("unexpected retry"); } },
+      emit: () => { throw new Error("unexpected progress"); },
+    },
+    contexts: [pr], mode: "single", statusOnly: false,
+    options: { ...options, maxQueryErrors: 1 },
+  });
+
+  it("returns a review blocker for an unresolved later-page thread", async () => {
+    const reader = fakeReader({ threadPages: [
+      { threads: [{ id: "early", resolved: true, firstComment: null }], endCursor: "next" },
+      { threads: [{ id: "late", resolved: false, firstComment: null }], endCursor: null },
+    ] });
+    expect(await run(reader)).toMatchObject({
+      kind: "BLOCKER", exitCode: 3,
+      blocker: { kind: "review-threads", threads: [{ id: "late" }] },
+    });
+    expect(reader.calls).toEqual([
+      "pullRequest", "reviewThreadPage:null", "reviewThreadPage:next",
+      "checksFastPath", "commitRollups", "pullRequest",
+    ]);
+  });
+
+  it.each([{ cursors: ["a", "a"] }, { cursors: ["a", "b", "c", "a"] }])("blocks a cursor cycle %j without reading checks", async ({ cursors }) => {
+    const reader = fakeReader({ threadPages: cursors.map(endCursor => ({ threads: [], endCursor })) });
+    expect(await run(reader)).toMatchObject({
+      kind: "BLOCKER", exitCode: 7,
+      blocker: { kind: "status-query", failure: { kind: "missing-key", detail: 'invalid reviewThreads pagination repeated a cursor: "a"' } },
+    });
+    expect(reader.calls).toEqual(["pullRequest", "reviewThreadPage:null", ...cursors.slice(0, -1).map(cursor => `reviewThreadPage:${cursor}`)]);
+  });
+
+  it("does not start an already aborted observation", async () => {
+    const controller = new AbortController(), reader = fakeReader();
+    controller.abort(new Error("stop before pages"));
+    await expect(run(reader, controller.signal)).rejects.toThrow("stop before pages");
+    expect(reader.calls).toEqual([]);
+  });
+
+  it.each(["next", null])("aborts after a page with cursor %j without a later query or READY", async (endCursor) => {
+    const controller = new AbortController();
+    const base = fakeReader({ threadPages: [{ threads: [], endCursor }] });
+    const reader = { ...base, reviewThreadPage: async (requested: PrContext, after: string | null) => {
+      const page = await base.reviewThreadPage(requested, after);
+      controller.abort(new Error("stop between pages"));
+      return page;
+    } };
+    await expect(run(reader, controller.signal)).rejects.toThrow("stop between pages");
+    expect(base.calls).toEqual(["pullRequest", "reviewThreadPage:null"]);
+  });
+
+  it.each([
+    { headRefOid: "new-head" }, { state: "CLOSED" },
+    { state: "MERGED", mergedAt: "now" },
+    { headRefName: "renamed" }, { baseRefName: "retargeted" },
+  ] satisfies Partial<PullRequestFacts>[])("discards drift during pagination %j", async (change) => {
+    const base = fakeReader({ threadPages: [
+      { threads: [], endCursor: "next" }, { threads: [], endCursor: null },
+    ] });
+    let changed = false;
+    const reader = { ...base,
+      pullRequest: async (requested: PrContext) => ({ ...await base.pullRequest(requested), ...(changed ? change : {}) }),
+      reviewThreadPage: async (requested: PrContext, after: string | null) => {
+        const page = await base.reviewThreadPage(requested, after);
+        if (after === "next") changed = true;
+        return page;
+      },
+    };
+    expect(await run(reader)).toMatchObject({ kind: "BLOCKER", exitCode: 7, blocker: {
+      kind: "status-query", failure: { detail: "PR head/state/topology changed during observation; discard stale checks" },
+    } });
+    expect(base.calls).toEqual(["pullRequest", "reviewThreadPage:null", "reviewThreadPage:next", "checksFastPath", "commitRollups", "pullRequest"]);
+  });
 });

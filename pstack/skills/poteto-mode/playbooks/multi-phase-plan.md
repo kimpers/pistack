@@ -2,6 +2,8 @@
 
 Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
 
+Before dispatch, assess task difficulty through [the approved model policy](../../../../pi/references/delegation.md#model-policy). Use the exact approved selector; a different effort, speed, or family needs explicit approval.
+
 
 **You own the plan, not the code. The plan is a checklist an owner runs box by box and the operator audits from the evidence.** For work that spans phases or stacked PRs. The plan is the deliverable. Do not implement.
 
@@ -64,12 +66,12 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Run the repo's lint and typecheck once before the PR-facing push. Push with hooks on.
 - [ ] Run `/skill:deslop` before each commit and `/skill:no-comments` before review.
 - [ ] Triage every Bugbot and security-reviewer comment per `<resolved package>/pstack/skills/poteto-mode/references/bugbot-triage.md`.
-- [ ] Rebase onto current trunk before the code-ready report and babysit. Keep that merge base in fix rounds. Rebase again only at merge prep, on a `git merge-tree` conflict with trunk, or on a CI failure that comes from a change on trunk.
+- [ ] Apply the selected playbook's topology ownership. In Autopilot-full, the parent-managed owner rebases onto current trunk before code-ready and follows its step 5 for merge prep. In Autopilot-stack, owners never rebase onto another branch, trunk included. Only the root rebases or retargets under steps 2 and 3. Dependent owners branch from their parent's branch and adopt each root push as their new base and lease.
 
 ### Verdict and merge, for every PR
 
-- [ ] At the code-ready head SHA and at each later push that changes the patch, run the swarm per `pstack/skills/swarm/SKILL.md`. One gates lane. The approved live scenarios from the PR's **Verify, live** block (default ten; concurrency is separate). The perf lane from its **Verify, perf** block. Two or more audit lanes, each with its own focus, that read the diff and the receipts and distrust the PR body. The root audits the receipts in the merge-ready report before the verdict.
-- [ ] Clean only when every lane is `PASS`. Findings go back to the owner, including a defect that a lane filed as a note. A new head gets a fresh swarm and a fresh verdict, except for results that stay valid under the patch-id rule in `playbooks/shipping.md`.
+- [ ] A full swarm runs once, at the code-ready head. Another full swarm runs only for new behavior, a redesign, or a large new diff. A rebase, a merge-conflict resolution, or a minor fix gets a single verifier at the new head. Run each full swarm per `pstack/skills/swarm/SKILL.md`. One gates lane. The approved live scenarios from the PR's **Verify, live** block (default ten; concurrency is separate). The perf lane from its **Verify, perf** block. Two or more audit lanes, each with its own focus, that read the diff and the receipts and distrust the PR body. The root audits the receipts in the merge-ready report before the verdict.
+- [ ] Clean only when every lane is `PASS`. Findings go back to the owner, including a defect that a lane filed as a note. A new head gets a fresh verdict, except for lane results that stay valid under the patch-id rule in `playbooks/shipping.md`. The appropriate verifier checks changed behavior and retained proof. CI runs fresh at every new head.
 - [ ] <The merge or append rule from the execution playbook, with the patch-id rule from `playbooks/shipping.md`.>
 
 ### Boot recipe, for every live lane
@@ -133,8 +135,8 @@ Each live lane runs in its own local managed worktree at the verified named ref,
 
 - [ ] Root's clean verdict at the exact head SHA.
 - [ ] Bugbot triage done.
-- [ ] Rebased onto current trunk after the verdict, patch-id unchanged.
-- [ ] <The owner squash-merges its own PR, or the root appends it to the base-branch stack and the operator lands it bottom-up.>
+- [ ] <Autopilot-full. The parent-managed owner completes step 5's merge prep, current-head CI, tested-merge-result checks, and Shipping's per-lane verdict checks. Autopilot-stack. Only the root adjusts topology, applies those checks link by link, and returns the verified chain without landing.>
+- [ ] <The parent performs the explicitly authorized merge, or the root appends the verified link and the operator lands bottom-up. Once landing starts, only Shipping step 4's post-merge retarget and patch move may change the chain. Other fixes wait for the operator's go.>
 
 ## Close the program
 

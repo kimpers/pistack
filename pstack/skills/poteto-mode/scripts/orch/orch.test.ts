@@ -354,7 +354,7 @@ describe("Store", () => {
       { number: 10, headRefName: "stack/merged", baseRefName: "main", headRefOid: stack.mergedSha, state: "MERGED", isCrossRepository: false },
       { number: 13, headRefName: "stack/closed", baseRefName: "stack/merged", headRefOid: stack.closedSha, state: "CLOSED", isCrossRepository: false },
       { number: 11, headRefName: "stack/open", baseRefName: "stack/closed", headRefOid: stack.openSha, state: "OPEN", isCrossRepository: false },
-    ];
+    ] as const;
     const store = useStore(join(directory, "store"), { frontierCommand: (cmd, args, repo) => {
       expect(cmd).toBe("gh"); expect(repo).toBe(stack.repo);
       return JSON.stringify(rows.find(row => String(row.number) === args[2]));

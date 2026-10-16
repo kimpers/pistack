@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { WatcherQueryError } from "./github.ts";
+import { WatcherQueryError, parseFastCheck } from "./github.ts";
 import {
   applyQueueSnapshot,
   assessGitHubMerge,
@@ -501,5 +501,31 @@ describe("paginated review readiness", () => {
       kind: "status-query", failure: { detail: "PR head/state/topology changed during observation; discard stale checks" },
     } });
     expect(base.calls).toEqual(["pullRequest", "reviewThreadPage:null", "reviewThreadPage:next", "checksFastPath", "commitRollups", "pullRequest"]);
+  });
+});
+
+describe("fast-check state and bucket readiness", () => {
+  it.each([
+    { state: "SUCCESS", bucket: "pass", kind: "READY" },
+    { state: "NEUTRAL", bucket: "skipping", kind: "READY" },
+    { state: "SKIPPED", bucket: "skipping", kind: "READY" },
+    ...["pass", "skipping"].flatMap(bucket =>
+      ["CANCELLED", "PENDING", "FUTURE_VALUE"].map(state => ({ state, bucket, kind: "BLOCKER" as const }))
+    ),
+  ] as const)("classifies $state in $bucket as $kind with aggregate SUCCESS", async ({ state, bucket, kind }) => {
+    const reader = fakeReader({ fastPath: {
+      kind: "checks", checks: [parseFastCheck({ name: "build", state, bucket })],
+    } });
+    const result = await runSimple({
+      dependencies: {
+        reader,
+        clock: { now: () => 0, observedAt: () => "now", sleep: async () => { throw new Error("unexpected sleep"); } },
+        emit: () => { throw new Error("unexpected progress"); },
+      },
+      contexts: [context(1)], mode: "single", statusOnly: false,
+      options: { ...options, maxQueryErrors: 1 },
+    });
+    expect(result.kind).toBe(kind);
+    expect(result.exitCode).toBe(kind === "READY" ? 0 : 4);
   });
 });

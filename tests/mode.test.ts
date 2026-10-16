@@ -6,17 +6,20 @@ import pistack, { pingSubagents } from "../pi/extensions/pistack.ts";
 import { STATE_TYPE, emptyState, restoreState, updateChecklist } from "../pi/lib/session-state.ts";
 import { defaultModels } from "../pi/lib/models.ts";
 import { dependencyManifest, configPath } from "../pi/lib/setup.ts";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, renameSync, symlinkSync, lstatSync, chmodSync } from "node:fs";
 import { fixture } from "./fixtures.ts";
 
 function harness(f: ReturnType<typeof fixture>, manager = SessionManager.create(f.paths.cwd, join(f.root, "sessions"))) {
   const events = new Map<string, Function>(); const tools = new Map<string, any>(); let command: any;
-  const messages: string[] = [], prompts: string[] = [];
-  const pi: any = { on: (name: string, fn: Function) => events.set(name, fn), events: createEventBus(), registerTool: (tool: any) => tools.set(tool.name, tool), registerCommand: (_name: string, cmd: any) => { command = cmd; }, appendEntry: (type: string, data: unknown) => manager.appendCustomEntry(type, data), sendMessage: (m: any) => messages.push(m.content), sendUserMessage: (text: string) => prompts.push(text), getAllTools: () => [], getActiveTools: () => [] };
+  const messages: string[] = [], prompts: string[] = [], work: unknown[] = [], messageOptions: unknown[] = [];
+  const bus = createEventBus(), emit = bus.emit.bind(bus);
+  bus.emit = (name, data) => { work.push({ event: name, data }); emit(name, data); };
+  const pi: any = { on: (name: string, fn: Function) => events.set(name, fn), events: bus, registerTool: (tool: any) => tools.set(tool.name, tool), registerCommand: (_name: string, cmd: any) => { command = cmd; }, appendEntry: (type: string, data: unknown) => manager.appendCustomEntry(type, data), sendMessage: (m: any, options: unknown) => { messages.push(m.content); messageOptions.push(options); }, sendUserMessage: (text: string) => prompts.push(text), getAllTools: () => [], getActiveTools: () => [], setActiveTools: (...args: unknown[]) => work.push({ activate: args }), exec: (...args: unknown[]) => work.push({ exec: args }) };
   const parent = { provider: "fixture", id: "available" };
   const ctx: any = { cwd: f.paths.cwd, sessionManager: manager, model: parent, modelRegistry: { getAvailable: () => [parent] }, scopedModels: [], isProjectTrusted: () => true, hasUI: true, mode: "rpc", ui: { notify: (text: string) => messages.push(text), setStatus() {}, setWidget() {}, select: async () => undefined, confirm: async () => false, input: async () => undefined } };
+  ctx.executeTool = (...args: unknown[]) => work.push({ tool: args });
   pistack(pi);
-  return { events, tools, pi, ctx, messages, prompts, manager, command: (args: string) => command.handler(args, ctx), emit: (name: string, event = {}) => events.get(name)?.(event, ctx) };
+  return { events, tools, pi, ctx, messages, prompts, manager, completions: (prefix: string) => command.getArgumentCompletions(prefix), assertNoWork: () => { assert.deepEqual(prompts, []); assert.deepEqual(work, []); for (const options of messageOptions) assert.deepEqual(options, { triggerTurn: false }); }, command: (args: string) => command.handler(args, ctx), emit: (name: string, event = {}) => events.get(name)?.(event, ctx) };
 }
 function seed(manager: SessionManager) {
   manager.appendMessage({ role: "user", content: "fixture session", timestamp: Date.now() });
@@ -187,4 +190,234 @@ test("passive public ping handles current session, stale reply and absent provid
   assert.match(await pingSubagents({ events }, "current", 10), /current-session/);
   assert.match(await pingSubagents({ events }, "stale", 10), /unknown/); unsubscribe();
   assert.match(await pingSubagents({ events }, "current", 10), /timed out/);
+});
+
+test("persistent commands separate the user default from selected session state and retain checklists", async () => {
+  const f = fixture(); try {
+    const preference = join(f.paths.agentDir, "pistack-mode.json");
+    const preserved = [join(f.paths.agentDir, "settings.json"), join(f.paths.cwd, ".pi/settings.json"), configPath(f.paths, "user"), configPath(f.paths, "project")];
+    for (const path of preserved) f.write(path, '{ "unrelated": 42 }\n');
+    f.write(join(f.paths.cwd, ".pi/pistack-mode.json"), { enabled: false });
+    const before = preserved.map(path => readFileSync(path, "utf8"));
+    const a = harness(f); a.ctx.hasUI = false;
+    await a.emit("session_start", { reason: "startup" });
+    assert.deepEqual(restoreState(a.manager.getBranch()), emptyState());
+    assert.equal(a.manager.getEntries().filter(e => e.type === "custom").length, 1);
+    await a.tools.get("pistack_checklist").execute("id", { action: "start", playbook: "Feature", steps: ["Verify"] }, undefined, undefined, a.ctx);
+    await a.command("on --persist");
+    assert.deepEqual(JSON.parse(readFileSync(preference, "utf8")), { enabled: true });
+    assert.equal(lstatSync(preference).mode & 0o777, 0o600);
+    assert.equal(restoreState(a.manager.getBranch()).enabled, true);
+    await a.command("off");
+    assert.equal(JSON.parse(readFileSync(preference, "utf8")).enabled, true);
+    await a.emit("session_start", { reason: "reload" });
+    assert.equal(restoreState(a.manager.getBranch()).enabled, false);
+    assert.equal(restoreState(a.manager.getBranch()).items.length, 1);
+    const b = harness(f); await b.emit("session_start", { reason: "startup" });
+    assert.equal(restoreState(b.manager.getBranch()).enabled, true);
+    assert.deepEqual(restoreState(b.manager.getBranch()).items, []);
+    await a.command("off --persist"); await a.command("off --persist");
+    assert.deepEqual(JSON.parse(readFileSync(preference, "utf8")), { enabled: false });
+    await b.emit("session_start", { reason: "reload" });
+    assert.equal(restoreState(b.manager.getBranch()).enabled, true, "saved on beats new default off");
+    await b.command("on --persist");
+    assert.equal(JSON.parse(readFileSync(preference, "utf8")).enabled, true, "last replacement wins");
+    await a.command("status"); assert.match(a.messages.at(-1)!, /session.*OFF[\s\S]*new-session default.*ON/i);
+    await a.command(""); assert.match(a.messages.at(-1)!, /on --persist/); assert.match(a.messages.at(-1)!, /shared goals\/workers/i);
+    assert.ok(a.completions("on").some((item: any) => item.value === "on --persist" && /default/i.test(item.label)));
+    assert.ok(a.completions("off").some((item: any) => item.value === "off --persist"));
+    assert.deepEqual(preserved.map(path => readFileSync(path, "utf8")), before);
+    a.manager.newSession(); await a.emit("session_start", { reason: "new" });
+    assert.deepEqual(restoreState(a.manager.getBranch()), { ...emptyState(), enabled: true });
+    a.assertNoWork(); b.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+for (const scenario of ["fresh", "in memory", "model/thinking", "legacy", "header only", "empty file", "unexpected", "parent", "missing header", "inspection error", "saved off"]) {
+  test(`startup default uses public freshness evidence: ${scenario}`, async () => {
+    const f = fixture(); try {
+      f.write(join(f.paths.agentDir, "pistack-mode.json"), { enabled: true });
+      let manager = scenario === "in memory" ? SessionManager.inMemory(f.paths.cwd) : SessionManager.create(f.paths.cwd, join(f.root, "sessions"));
+      if (scenario === "model/thinking") { manager.appendModelChange("fixture", "available"); manager.appendThinkingLevelChange("high"); }
+      if (scenario === "legacy" || scenario === "saved off") {
+        seed(manager);
+        if (scenario === "saved off") manager.appendCustomEntry(STATE_TYPE, emptyState());
+        manager = SessionManager.open(manager.getSessionFile()!);
+      }
+      if (scenario === "header only" || scenario === "empty file") { f.write(manager.getSessionFile()!, scenario === "empty file" ? "" : JSON.stringify(manager.getHeader()) + "\n"); manager = SessionManager.open(manager.getSessionFile()!); }
+      if (scenario === "unexpected") manager.appendCustomEntry("other", {});
+      if (scenario === "parent") manager.newSession({ parentSession: "/fixture/parent.jsonl" });
+      const h = harness(f, manager); h.ctx.hasUI = false;
+      if (scenario === "missing header") manager.getHeader = () => null;
+      if (scenario === "inspection error") {
+        const loop = join(f.root, "loop"); symlinkSync(loop, loop); manager.getSessionFile = () => join(loop, "session.jsonl");
+      }
+      await h.emit("session_start", { reason: "startup" });
+      const fresh = ["fresh", "in memory", "model/thinking"].includes(scenario);
+      assert.equal(restoreState(manager.getBranch()).enabled, fresh);
+      assert.equal(manager.getEntries().filter(e => e.type === "custom" && e.customType === STATE_TYPE).length, fresh || scenario === "saved off" ? 1 : 0);
+      h.assertNoWork();
+    } finally { f.cleanup(); }
+  });
+}
+
+for (const reason of ["reload", "resume", "fork", "tree", "compact"]) {
+  test(`${reason} never initializes legacy state from today's default`, async () => {
+    const f = fixture(); try {
+      f.write(join(f.paths.agentDir, "pistack-mode.json"), "broken JSON");
+      const h = harness(f); h.ctx.hasUI = false;
+      await h.emit(reason === "tree" || reason === "compact" ? `session_${reason}` : "session_start", { reason });
+      assert.deepEqual(restoreState(h.manager.getBranch()), emptyState());
+      assert.deepEqual(h.messages, [], "restoration must not read the broken preference");
+      assert.deepEqual(h.manager.getEntries(), []);
+      h.assertNoWork();
+    } finally { f.cleanup(); }
+  });
+}
+
+test("buffered snapshots survive a fresh extension reload but are not restart-persisted", async () => {
+  const f = fixture(); try {
+    f.write(join(f.paths.agentDir, "pistack-mode.json"), { enabled: true });
+    const h = harness(f); await h.emit("session_start", { reason: "startup" });
+    await h.command("off --persist");
+    assert.equal(existsSync(h.manager.getSessionFile()!), false);
+    f.write(join(f.paths.agentDir, "pistack-mode.json"), { enabled: true });
+    const reload = harness(f, h.manager); await reload.emit("session_start", { reason: "reload" });
+    assert.equal(restoreState(h.manager.getBranch()).enabled, false);
+    assert.equal(existsSync(h.manager.getSessionFile()!), false);
+    assert.match(h.messages.join("\n"), /before.*conversation|until.*conversation/i);
+    h.assertNoWork(); reload.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+test("malformed preference fails closed on new sessions but cannot erase saved ancestry", async () => {
+  const f = fixture(); try {
+    const path = join(f.paths.agentDir, "pistack-mode.json"); f.write(path, "broken");
+    const h = harness(f); h.ctx.hasUI = false;
+    await h.emit("session_start", { reason: "startup" });
+    assert.equal(restoreState(h.manager.getBranch()).enabled, false);
+    assert.match(h.messages.join("\n"), /default.*(invalid|error|failed)/i);
+    await h.command("on");
+    const saved = h.manager.getBranch();
+    await h.command("off --persist");
+    assert.deepEqual(h.manager.getBranch(), saved);
+    assert.equal(readFileSync(path, "utf8"), "broken");
+    await h.emit("session_start", { reason: "startup" });
+    assert.equal(restoreState(h.manager.getBranch()).enabled, true);
+    await h.command("status");
+    assert.match(h.messages.at(-1)!, /session.*ON[\s\S]*default.*(invalid|error|unavailable)/i);
+    h.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+test("preference write failure leaves session mode and checklist unchanged", async () => {
+  const f = fixture(); try {
+    const h = harness(f); h.ctx.hasUI = false;
+    await h.command("on");
+    await h.tools.get("pistack_checklist").execute("id", { action: "add", text: "keep" }, undefined, undefined, h.ctx);
+    const before = h.manager.getBranch();
+    chmodSync(f.paths.agentDir, 0o500);
+    try {
+      await h.command("off --persist");
+      assert.deepEqual(h.manager.getBranch(), before);
+      assert.equal(existsSync(join(f.paths.agentDir, "pistack-mode.json")), false);
+      assert.match(h.messages.at(-1)!, /default.*(failed|not saved)/i);
+      assert.doesNotMatch(h.messages.at(-1)!, /default.*saved.*OFF/i);
+    } finally { chmodSync(f.paths.agentDir, 0o700); }
+    h.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+for (const enabled of [true, false]) {
+  test(`real failed disk append observes already-mutated ancestry after saving default ${enabled}`, async () => {
+    const f = fixture(); try {
+      const h = harness(f); seed(h.manager);
+      await h.command(enabled ? "off" : "on");
+      await h.tools.get("pistack_checklist").execute("id", { action: "add", text: "keep through failed append" }, undefined, undefined, h.ctx);
+      const path = h.manager.getSessionFile()!, backup = `${path}.original`;
+      const durableBefore = readFileSync(path, "utf8");
+      renameSync(path, backup); mkdirSync(path);
+      await h.command(enabled ? "on --persist" : "off --persist");
+      assert.deepEqual(JSON.parse(readFileSync(join(f.paths.agentDir, "pistack-mode.json"), "utf8")), { enabled });
+      assert.equal(restoreState(h.manager.getBranch()).enabled, enabled, "SDK mutates the active branch before disk append throws");
+      assert.equal(restoreState(h.manager.getBranch()).items[0].text, "keep through failed append");
+      assert.equal(readFileSync(backup, "utf8"), durableBefore);
+      assert.match(h.messages.at(-1)!, new RegExp(`default.*saved.*${enabled ? "ON" : "OFF"}[\\s\\S]*observed.*session.*${enabled ? "ON" : "OFF"}[\\s\\S]*durability.*unconfirmed`, "i"));
+      assert.doesNotMatch(h.messages.at(-1)!, /rolled back|unchanged/i);
+      await h.emit("session_start", { reason: "reload" });
+      assert.equal(restoreState(h.manager.getBranch()).enabled, enabled);
+      h.assertNoWork();
+    } finally { f.cleanup(); }
+  });
+}
+
+test("new-session append failure reports observed in-memory ancestry without starting work", async () => {
+  const f = fixture(); try {
+    f.write(join(f.paths.agentDir, "pistack-mode.json"), { enabled: true });
+    const h = harness(f); seed(h.manager);
+    const path = h.manager.getSessionFile()!; renameSync(path, `${path}.original`); mkdirSync(path);
+    await h.emit("session_start", { reason: "new" });
+    assert.equal(restoreState(h.manager.getBranch()).enabled, true);
+    assert.match(h.messages.at(-1)!, /observed.*session.*ON[\s\S]*durability.*unconfirmed/i);
+    h.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+test("mode preference boundary rejects malformed JSON and unsafe destinations, allows symlinked agent directory", async () => {
+  const { readModeDefault, writeModeDefault } = await import("../pi/lib/mode-default.ts");
+  const f = fixture(); try {
+    assert.equal(readModeDefault(f.paths.agentDir), false);
+    for (const [index, value] of ["{", "null", "[]", '{}', '{"enabled":"true"}', '{"enabled":true,"unknown":1}'].entries()) {
+      const dir = join(f.root, `malformed-${index}`), path = join(dir, "pistack-mode.json"); f.write(path, value);
+      assert.throws(() => readModeDefault(dir)); assert.throws(() => writeModeDefault(dir, false));
+      assert.equal(readFileSync(path, "utf8"), value);
+    }
+    for (const kind of ["symlink", "dangling", "directory"]) {
+      const dir = join(f.root, kind), path = join(dir, "pistack-mode.json"), target = join(f.root, `${kind}-target`); mkdirSync(dir);
+      if (kind === "directory") mkdirSync(path);
+      else { if (kind === "symlink") f.write(target, { enabled: true }); symlinkSync(target, path); }
+      assert.throws(() => readModeDefault(dir)); assert.throws(() => writeModeDefault(dir, false));
+      assert.equal(lstatSync(path).isSymbolicLink(), kind !== "directory");
+      if (kind === "symlink") assert.deepEqual(JSON.parse(readFileSync(target, "utf8")), { enabled: true });
+      if (kind === "dangling") assert.equal(existsSync(target), false);
+    }
+    const link = join(f.root, "agent-link"); symlinkSync(f.paths.agentDir, link);
+    writeModeDefault(link, true); assert.equal(readModeDefault(link), true);
+    writeModeDefault(link, false); assert.equal(readModeDefault(f.paths.agentDir), false);
+  } finally { f.cleanup(); }
+});
+
+test("new-session initialization preserves a snapshot supplied by the host instead of consulting the default", async () => {
+  const f = fixture(); try {
+    f.write(join(f.paths.agentDir, "pistack-mode.json"), "malformed");
+    const h = harness(f);
+    const saved = updateChecklist(emptyState(), { action: "add", text: "host-supplied checklist" });
+    h.manager.appendCustomEntry(STATE_TYPE, saved);
+    const before = h.manager.getBranch();
+    await h.emit("session_start", { reason: "new" });
+    assert.deepEqual(h.manager.getBranch(), before);
+    assert.deepEqual(restoreState(h.manager.getBranch()), saved);
+    assert.deepEqual(h.messages, []);
+    h.assertNoWork();
+  } finally { f.cleanup(); }
+});
+
+test("unreadable preference fails closed and cannot overwrite bytes or a saved checklist", async () => {
+  const f = fixture(); try {
+    const path = join(f.paths.agentDir, "pistack-mode.json"); f.write(path, { enabled: true });
+    const h = harness(f); h.ctx.hasUI = false;
+    chmodSync(path, 0o000);
+    try {
+      await h.emit("session_start", { reason: "startup" });
+      assert.equal(restoreState(h.manager.getBranch()).enabled, false);
+      assert.match(h.messages.at(-1)!, /default.*unavailable/i);
+      await h.tools.get("pistack_checklist").execute("id", { action: "add", text: "keep" }, undefined, undefined, h.ctx);
+      const before = h.manager.getBranch();
+      await h.command("on --persist");
+      assert.deepEqual(h.manager.getBranch(), before);
+      assert.match(h.messages.at(-1)!, /default not saved/);
+    } finally { chmodSync(path, 0o600); }
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), { enabled: true });
+    h.assertNoWork();
+  } finally { f.cleanup(); }
 });

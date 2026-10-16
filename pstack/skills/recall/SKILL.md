@@ -6,6 +6,8 @@ disable-model-invocation: true
 
 Read [the Pi integration contract](../../../pi/references/integration.md) before executing this skill.
 
+Before dispatch, assess task difficulty through [the approved model policy](../../../pi/references/delegation.md#model-policy). Use the exact approved selector; a different effort, speed, or family needs explicit approval.
+
 
 # Recall
 

@@ -20,7 +20,7 @@ Read available recent commits, reverts, review comments, agent instruction files
 
 1. Eliminate the mistake with architecture. Give state one owner and each task one supported path. Hide internals so the wrong import fails. Derive repeated lists from one source. Remove dead examples only within scope.
 2. Enforce it with types so the bad state cannot be written. If bad code still compiles, add a lint or CI check whose error names the file, type, or function to use instead. For an existing widespread pattern, reject new occurrences without hiding old ones.
-3. Test the behavior. Replace tests that pass when their subject returns nothing with checks of the actual result. Never remove a safeguard to obtain green.
+3. Test the behavior. Fix or delete tests that still pass when the behavior breaks, or fail when only the internals change. Never remove a safeguard to obtain green.
 4. Write docs or agent rules last, for judgment calls that code cannot enforce.
 
 ## Fix and prove

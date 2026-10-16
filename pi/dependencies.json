@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "qualification": "Core candidates loaded through the public Pi 1.1.0 SDK on macOS. Deterministic setup/model checks and parent discovery/deferred activation/static workflow validation passed; two real read-only native packaged-agent smoke calls passed, and independent correctness/conversion reviews found no unresolved blockers. Optional packages were not requalified. Not a release-qualified support matrix. Setup approval is still required.",
+  "qualification": "Candidate pins are unchanged from the accepted 0.15.23 refresh, which loaded core packages through the public Pi 1.1.0 SDK on macOS and completed bounded read-only packaged-agent smoke. Qualification for each refresh is recorded in pi/UPSTREAM.md; historical checks do not qualify new source. Optional packages were not requalified. Not a release-qualified support matrix. Setup approval is still required.",
   "piVersion": "1.1.0",
   "extensions": [
     { "name": "pi-subagents", "version": "0.77.0", "required": true, "reason": "Isolated workers, packaged agent discovery, reviews and completion notifications", "repositories": ["github.com/nicobailon/pi-subagents"], "tools": ["subagent"] },

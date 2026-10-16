@@ -5,6 +5,7 @@ import {
   buildReviewThreads,
   mapRollupNode,
   orderStack,
+  parseFastCheck,
   parsePullRequest,
   parseReviewThreadPage,
   resolveChecks,
@@ -121,6 +122,37 @@ describe("rollup node mapping", () => {
     ).toMatchObject({ kind: "code-review-gate" });
   });
 
+  it("classifies a Code Review Gate waiting on an owner approval as the gate", () => {
+    expect(
+      mapRollupNode({
+        __typename: "CheckRun",
+        name: "Code Review Gate",
+        status: "COMPLETED",
+        conclusion: "ACTION_REQUIRED",
+        description: "1 of 2 policies",
+      })
+    ).toMatchObject({
+      kind: "code-review-gate",
+      reportedState: "ACTION_REQUIRED",
+    });
+  });
+
+  it("classifies a fast-path Code Review Gate waiting on an owner approval as the gate", () => {
+    expect(
+      parseFastCheck({
+        name: "Code Review Gate",
+        state: "ACTION_REQUIRED",
+        bucket: "fail",
+      })
+    ).toMatchObject({
+      kind: "code-review-gate",
+      reportedState: "ACTION_REQUIRED",
+    });
+    expect(
+      parseFastCheck({ name: "ci", state: "ACTION_REQUIRED", bucket: "fail" })
+    ).toMatchObject({ kind: "failed", reportedState: "ACTION_REQUIRED" });
+  });
+
   it("maps StatusContext states and drops unknown typenames", () => {
     expect(
       mapRollupNode({
@@ -138,6 +170,31 @@ describe("rollup node mapping", () => {
     ).toMatchObject({ kind: "failed", reportedState: "FUTURE_VALUE" });
     expect(mapRollupNode({ __typename: "FutureNode" })).toBeNull();
   });
+});
+
+describe("fast-check pending bucket validation", () => {
+  for (const name of ["Code Review Gate", "build"]) {
+    it.each(["CANCELLED", "FUTURE_VALUE", "STALE", "SUCCESS", "NEUTRAL", "SKIPPED", "TIMED_OUT", "FAILURE", "ERROR", "COMPLETED", ""])(`rejects ${name} state %j in pending`, (state) => {
+      expect(parseFastCheck({ name, state, bucket: "pending" })).toMatchObject({
+        kind: "failed", reportedState: state,
+      });
+    });
+
+    it.each(["EXPECTED", "REQUESTED", "WAITING", "QUEUED", "PENDING", "IN_PROGRESS"])(`accepts known ${name} pending state %s`, (state) => {
+      expect(parseFastCheck({ name, state, bucket: "pending" })).toMatchObject({
+        kind: name === "Code Review Gate" ? "code-review-gate" : "pending", reportedState: state,
+      });
+      expect(parseFastCheck({ name, state, bucket: "fail" })).toMatchObject({
+        kind: "failed", reportedState: state,
+      });
+    });
+
+    it(`preserves the explicit ACTION_REQUIRED exception for ${name}`, () => {
+      expect(parseFastCheck({ name, state: "ACTION_REQUIRED", bucket: "pending" })).toMatchObject({
+        kind: name === "Code Review Gate" ? "code-review-gate" : "failed", reportedState: "ACTION_REQUIRED",
+      });
+    });
+  }
 });
 
 describe("closed enum parsing", () => {

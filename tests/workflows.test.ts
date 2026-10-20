@@ -201,3 +201,23 @@ test("portable refresh behavior survives Pi adaptation rather than only conflict
   assert.deepEqual([...epistemics.matchAll(/^### \d\. (.+)$/gm)].map(m => m[1]), ["Direct", "Supported", "Inferred", "Speculative", "Unknown"]);
   assert.match(epistemics, /Contradict/i); assert.match(why, /unavailable|gap/);
 });
+
+test("0.15.25 verification rounds and topology callers preserve native authority", () => {
+  for (const name of ["autopilot-full", "multi-phase-plan"]) {
+    const body = playbook(name);
+    for (const phrase of ["full swarm runs once", "new behavior, a redesign, or a large new diff", "minor fix gets a single verifier", "every new head"]) assert.ok(body.includes(phrase), `${name}: ${phrase}`);
+  }
+  const stack = playbook("autopilot-stack");
+  assert.deepEqual([...stack.matchAll(/^(\d+)\. /gm)].map(m => Number(m[1])), [1, 2, 3, 4]);
+  for (const phrase of ["never rebase onto another branch, trunk included", "new base and lease", "Once landing starts", "operator's go"]) assert.ok(stack.includes(phrase), phrase);
+  assert.match(playbook("babysit"), /autopilot-stack.md` steps 2 and 3/);
+  assert.doesNotMatch(playbook("multi-phase-plan"), /\[ \] Rebase onto current trunk|\[ \] Rebased onto current trunk after the verdict/);
+  for (const phrase of ["post-merge", "merged with trunk as its base", "merge queue only queued", "frozen bottom-to-top"]) assert.ok(playbook("shipping").includes(phrase), phrase);
+  for (const phrase of ["GitHub-only", "forge head SHAs", "double observation", "Origin topology"]) assert.ok(playbook("orchestrate").includes(phrase), phrase);
+});
+
+test("per-task model guidance never substitutes unapproved selectors or shrinks panels", () => {
+  const body = read("pi/references/delegation.md");
+  for (const phrase of ["task difficulty", "speed", "family", "explicit approval", "exact selector", "saved panel", "inherited effort"]) assert.ok(body.includes(phrase), phrase);
+  assert.match(body, /Never silently raise or lower/);
+});

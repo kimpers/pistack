@@ -36,6 +36,19 @@ test("gh frontier rejects ambiguity, cycles, missing/foreign/malformed and chang
   assert.throws(() => resolveFrontier("/fixture", undefined, (cmd, args, repo) => args[1] === "list" ? "[]" : forge()(cmd, args, repo)), /missing/);
 });
 
+test("gh discovery rejects its completeness bound and reobserves forge heads before returning", () => {
+  const bounded = Array.from({ length: 1000 }, (_, index) => ({ ...row(index + 1, `branch-${index}`, "main"), headRefOid: sha(1) }));
+  assert.throws(() => resolveFrontier("/fixture", undefined, forge(bounded)), /Incomplete\/bounded/);
+  let lists = 0;
+  const changing: FrontierCommand = (command, args, repo) => {
+    if (args[1] !== "list") return forge()(command, args, repo);
+    lists++;
+    return JSON.stringify(lists === 1 ? rows : [rows[0], { ...rows[1], headRefOid: sha(3) }]);
+  };
+  assert.throws(() => resolveFrontier("/fixture", undefined, changing), /changed during observation/);
+  assert.equal(lists, 2);
+});
+
 test("store preserves generation on failed frontier refresh and never reuses verification at a pushed head", async () => {
   const f = fixture(); let head = sha(1), broken = false;
   const store = openStore(join(f.root, "store"), { frontierCommand: () => broken ? "{}" : JSON.stringify({ ...rows[0], headRefOid: head }) });

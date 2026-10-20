@@ -1,13 +1,25 @@
 # Upstream boundary
 
 - Source: [cursor/plugins](https://github.com/cursor/plugins).
-- Imported baseline: `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454`.
-- Previous import: `c47b12849e43f18d5c374c7069c744cc55b0ea00`; refresh source checkpoint: `977f9e078f34cda30d8b103936f66a76d6e7c1e7`.
-- Upstream plugin: pstack `0.15.23`, original `pstack/` paths retained.
+- Imported baseline: `2f8377461fd533f5af782e1fd643783b1067b847`.
+- Previous import: `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454`; refresh source checkpoint: `929c9f8233fef6d9e4a13858a3d7e2e9cdd47aa4`.
+- Upstream plugin: pstack `0.15.25`, original `pstack/` paths retained.
 - License: [pstack/LICENSE](../pstack/LICENSE), MIT, Copyright (c) 2026 Lauren Tan. Retain this notice with every distribution and substantial adaptation.
-- Refresh branch: `update/pstack-dbf4981`. Independent acceptance precedes publication. For this refresh, the owner authorized a signed commit and push of the refresh branch after verification, without installed-source promotion. The historical personal-promotion order remains **VERIFIED → COMMIT → LOCAL INSTALL/UPDATE + SMOKE → PUSH** when that separate operation is approved. The repository destination is `git@github.com:kimpers/piStack.git`. Root npm package `pistack` remains provisional and private. No npm publication is authorized.
+- Refresh branch: `update/pstack-2f83774`. The approved order is verification and independent acceptance, signed commit, non-force push, installed Git-pin update, then installed-source smoke. Preserve personal mode defaults, filters, trust, and unrelated settings. The repository destination is `git@github.com:kimpers/piStack.git`. Root npm package `pistack` remains provisional and private. No PR, default-branch change, or npm publication is authorized.
 
-## Frozen 0.15.23 refresh qualification
+## Frozen 0.15.25 refresh qualification
+
+The [disposition inventory](upstream-updates/2f83774.md) accounts for all 70 upstream paths, including 51 pstack paths. The explicit package exposes 54 skills and 24 principles. Sharpen is direct-only. Portable review, stack ownership, caller verification, and evidence rules remain, with Pi-native delegation and authorization boundaries. Core candidate pins, saved model panels, licenses, and frozen helper inputs are unchanged.
+
+Parent component checks passed 27 content tests. After the review correction, the Bun helper suite passed 154 tests with 533 assertions. Strict helper and orchestration checks and both CLI help commands passed. The watcher preserves conservative aggregate readiness and rejects contradictory fast-path state/bucket inputs. The GitHub-only frontier and advisory cleanup remain deliberate divergences. These are local fixtures and executable checks, not authenticated forge observations.
+
+Explicit `on --persist` and `off --persist` commands save a user-wide new-session default separately from project model configuration. Plain commands remain session-only. Saved selected ancestry wins over the default. Public SDK fixtures cover conservative startup freshness, reload, new sessions, actual filesystem failures, and headless error delivery without model calls. Pi buffers conversation-free session entries; immediate restart durability is not promised. No private flush, second session store, or forced model turn is used.
+
+Parent integrated verification passed 340 Node tests with zero skips, including extracted-package/resource/link checks, public SDK persistence, and the synthetic update rehearsal from the new baseline. Strict changed-adapter typechecking passed. The first independent correctness and conversion reviews requested a fail-closed pending-bucket correction and consistent help/setup persistence wording. Both have red/green regression evidence. A fresh independent recheck returned READY for correctness, conversion, and the bounded evidence trail. It also caught and closed a stale historical-readiness claim in `pi/README.md`. Same-model contexts provide independence, not model-family diversity. Final evaluation fingerprints and installed-source verification remain separate promotion gates. Component and failure evidence is retained under `/tmp/pistack-refresh-2f83774.IxH0r9/`. The personal source started pinned at `977f9e078f34cda30d8b103936f66a76d6e7c1e7`; development edits alone do not update it. This refresh permits at most two read-only packaged-agent smoke calls across development and installed phases. One development call completed with exit 0 through the public native subagent tool. It loaded `pistack.poteto-agent` from this package, inherited the temporary SDK parent's medium effort with the freshly resolved `openai-codex/gpt-6-astra` selector, and made only four reads. Persistent commands and reload passed only in the temporary profile. Personal settings, model policy, auth bytes, and the absent personal mode preference were unchanged; the temporary auth copy was removed. The second call is reserved for installed-source verification. Personal persistence activation is not authorized.
+
+Linux, clean-host and minimum-Node support, browser/application-PTY, authenticated forge, and broad worker/goal/monitor lifecycle qualification remain unavailable. No release qualification is claimed. The following sections are historical evidence, not acceptance of this refresh.
+
+## Historical 0.15.23 refresh qualification
 
 The [disposition inventory](upstream-updates/dbf4981.md) accounts for 149 rename-aware upstream records, including 90 pstack paths. The package exposes 53 skills and 24 principles. Six new direct skills cover benchmark checks, structural corrections, goal restatement, session recap, help, and explaining measurements. Other monorepo integrations remain excluded. Licenses, bundled deslop, and the helper lock are unchanged. The helper manifest changes only its test command.
 
@@ -90,7 +102,7 @@ Targeted source edits replace Task/model/cloud/path/trigger assumptions with pub
 5. Run `npm test`, packaging validation and U3/U4/U5 workflow/update-rehearsal checks. Review unresolved incompatibilities rather than silently dropping features.
 6. Only the owner chooses final distribution identity, repository/npm ownership, releases and publication. Removing piStack must not remove shared packages or personal policy.
 
-The prior frozen imports are retained in Git ancestry. The 0.15.23 refresh retains the new target as its upstream merge parent. The real 0.15.5 delta is covered by the [100-path refresh disposition](upstream-updates/c47b128.md), and the new delta by the [0.15.23 disposition](upstream-updates/dbf4981.md). The synthetic rehearsal below tests future update handling; it is not the audit of that real delta.
+The prior frozen imports remain in Git ancestry. The 0.15.25 refresh retains its frozen target as the upstream merge parent. The real deltas are covered by the [0.15.5 disposition](upstream-updates/c47b128.md), [0.15.23 disposition](upstream-updates/dbf4981.md), and [0.15.25 disposition](upstream-updates/2f83774.md). The synthetic rehearsal below tests future update handling; it is not the audit of that real delta.
 
 ## Historical packaging and update qualification
 
@@ -129,4 +141,4 @@ A live Pi TUI started with mode off, retained mode on across `/reload`, executed
 
 The job uses only disposable runner-temp settings/homes, verifies clean setup and an existing-extension rerun, loads actual resources, runs local suites and installed helpers/typecheck/help, and retains logs as CI artifacts. It never publishes the private package, launches live children or creates goals. Hosted CI has **not run**. Personal local installation reused existing core extensions and applied the approved helper proposal; it did not test clean core network provisioning. See development `evals/README.md` for exact offline commands and future live evaluation protocol.
 
-Release still requires: an owner-approved exact dependency/platform set; clean-host network installation and cross-platform helper evidence; broader worker-goal-monitor/browser/application-PTY and authenticated PR workflow proof beyond the bounded local smoke above; minimum-Node qualification; and separate npm identity/publication approval. Parent promotion follows VERIFIED → COMMIT → LOCAL INSTALL/UPDATE + SMOKE → PUSH after independent acceptance. None of those in-scope capabilities is silently deferred or replaced by fixture success. Benny and make-bot-ui remain the only expressly deferred integration packs.
+Release still requires: an owner-approved exact dependency/platform set; clean-host network installation and cross-platform helper evidence; broader worker-goal-monitor/browser/application-PTY and authenticated PR workflow proof beyond the bounded local smoke above; minimum-Node qualification; and separate npm identity/publication approval. For this refresh, parent promotion follows independent acceptance, signed commit, non-force push, approved installed Git-pin update, then installed-source smoke. None of those in-scope capabilities is silently deferred or replaced by fixture success. Benny and make-bot-ui remain the only expressly deferred integration packs.

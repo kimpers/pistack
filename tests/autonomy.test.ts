@@ -430,9 +430,11 @@ fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(args) + '\\n');
 const input = JSON.parse(fs.readFileSync(${JSON.stringify(input)}, 'utf8'));
 const query = args.find(arg => arg.startsWith('query=')) || '';
 if (args[0] === 'pr' && args[1] === 'view') {
-  process.stdout.write(JSON.stringify(input.facts));
+  const views = fs.readFileSync(${JSON.stringify(calls)}, 'utf8').trim().split('\\n').map(JSON.parse).filter(row => row[0] === 'pr' && row[1] === 'view').length;
+  process.stdout.write(JSON.stringify(views > 1 && input.freshFacts ? input.freshFacts : input.facts));
 } else if (args[0] === 'pr' && args[1] === 'checks') {
-  process.stdout.write(JSON.stringify([{name:'ci',state:'SUCCESS',bucket:'pass'}]));
+  process.stdout.write(JSON.stringify(input.fastChecks ?? [{name:'ci',state:'SUCCESS',bucket:'pass'}]));
+  process.exit(input.fastExit ?? 0);
 } else if (query.includes('query ReviewThreads')) {
   if (!query.includes('reviewThreads(first: 100, after: $after)') || !query.includes('pageInfo')) process.exit(9);
   const cursor = args.find(arg => arg.startsWith('after='));
@@ -447,8 +449,21 @@ if (args[0] === 'pr' && args[1] === 'view') {
     if (cursor && cursor !== 'after=next') process.exit(10);
     process.stdout.write(JSON.stringify(cursor ? input.second : input.first));
   }
+} else if (query.includes('query PrCheckRollup')) {
+  const cursor = args.find(arg => arg.startsWith('after='));
+  if (cursor && input.hangChecks) {
+    process.once('SIGTERM', () => {
+      fs.writeFileSync(${JSON.stringify(stopping)}, 'stopping');
+      setTimeout(() => { fs.writeFileSync(${JSON.stringify(stopped)}, 'settled'); process.exit(0); }, 150);
+    });
+    fs.writeFileSync(${JSON.stringify(started)}, 'started');
+    setInterval(() => {}, 1000);
+  } else {
+    if (cursor && cursor !== 'after=next') process.exit(10);
+    process.stdout.write(JSON.stringify(cursor ? input.checkSecond : input.checkFirst));
+  }
 } else if (query.includes('query PrCommitStatuses')) {
-  process.stdout.write(JSON.stringify({data:{repository:{pullRequest:{commits:{nodes:[{commit:{oid:'head',statusCheckRollup:{state:'SUCCESS'}}}]}}}}}));
+  process.stdout.write(JSON.stringify({data:{repository:{pullRequest:{commits:{nodes:input.commits ?? [{commit:{oid:'head',statusCheckRollup:{state:'SUCCESS'}}}]}}}}}));
 } else process.exit(11);
 `);
   chmodSync(gh, 0o755);
@@ -516,4 +531,229 @@ test("actual paginated GitHub cancellation waits for subprocess close and never 
     await assert.rejects(reader.reviewThreadPage(context, "next"), /abort/i);
     assert.equal(f.commands().length, 3, "aborted reader must not spawn another query");
   } finally { controller.abort(); f.cleanup(); }
+});
+
+function checkPage(nodes: unknown[], pageInfo: unknown = { hasNextPage: false, endCursor: null }, oid = "head") {
+  return { data: { repository: { pullRequest: { commits: { nodes: [{ commit: {
+    oid, statusCheckRollup: { contexts: { nodes, pageInfo } },
+  } }] } } } } };
+}
+
+const actionRequiredGate = { name: "Code Review Gate", state: "ACTION_REQUIRED", bucket: "fail" };
+const ownerGateNode = { __typename: "CheckRun", name: "Code Review Gate", status: "COMPLETED", conclusion: "ACTION_REQUIRED" };
+const passingNode = { __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "SUCCESS" };
+
+test("actual ACTION_REQUIRED reader-to-policy aggregate acceptance matrix", async (t) => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    for (const path of ["fast", "graphql"]) {
+      for (const mergeStateStatus of ["CLEAN", "BLOCKED", "UNKNOWN", "UNSTABLE"]) {
+        for (const state of ["SUCCESS", "PENDING", "FAILURE", "ERROR", "EXPECTED", null, "FUTURE_VALUE"]) {
+          await t.test(`${path} ${mergeStateStatus} aggregate ${state}`, async () => {
+            f.write(f.calls, "");
+            f.write(f.input, {
+              facts: { ...facts, mergeStateStatus, reviewDecision: "REVIEW_REQUIRED" },
+              first: reviewPage({ hasNextPage: false, endCursor: null }),
+              fastChecks: path === "fast" ? [actionRequiredGate] : [], fastExit: 1,
+              commits: [{ commit: { oid: "head", statusCheckRollup: state === null ? null : { state } } }],
+              checkFirst: checkPage([passingNode], { hasNextPage: true, endCursor: "next" }),
+              checkSecond: checkPage([ownerGateNode, { ...passingNode, name: "optional", conclusion: "SKIPPED" }]),
+            });
+            const r = runtime();
+            const result = await runSimple({ dependencies: { ...r.dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+            if (state === "SUCCESS" || state === "PENDING") {
+              assert.equal(result.kind, "READY");
+              if (result.kind !== "READY" || result.scope.kind !== "single" || result.scope.pr.kind !== "ready-pr") assert.fail("expected open-PR proof");
+              assert.equal(result.scope.pr.proof.mergeAuthorization, false);
+              assert.equal(result.scope.pr.proof.headRefOid, "head");
+              assert.equal(result.scope.pr.proof.ci.github.headRollupState, state);
+              assert.ok(result.scope.pr.proof.ci.all.some(check => check.kind === "code-review-gate" && check.reportedState === "ACTION_REQUIRED"));
+              if (state === "PENDING") {
+                assert.equal(result.scope.pr.proof.ci.source, "graphql-rollup");
+                assert.ok(f.commands().some(args => args.includes("after=next")));
+              }
+            } else {
+              assert.equal(result.kind, "BLOCKER");
+              assert.notEqual(result.exitCode, 0);
+            }
+          });
+        }
+      }
+    }
+  } finally { f.cleanup(); }
+});
+
+test("actual ACTION_REQUIRED proof rejects incomplete checks and preserves normal readiness gates", async (t) => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    const base = {
+      facts, first: reviewPage({ hasNextPage: false, endCursor: null }),
+      fastChecks: [actionRequiredGate], fastExit: 1,
+      commits: [{ commit: { oid: "head", statusCheckRollup: { state: "PENDING" } } }],
+      checkFirst: checkPage([ownerGateNode], { hasNextPage: true, endCursor: "next" }),
+      checkSecond: checkPage([passingNode]),
+    };
+    const cases = [
+      { name: "missing aggregate", change: { commits: [] } },
+      { name: "prior passing head only", change: { commits: [{ commit: { oid: "old-head", statusCheckRollup: { state: "SUCCESS" } } }] } },
+      ...["FAILURE", "CANCELLED", "FUTURE_VALUE", "ACTION_REQUIRED"].map(conclusion => ({
+        name: `later non-gate ${conclusion}`, change: { checkSecond: checkPage([{ ...passingNode, conclusion }]) },
+      })),
+      { name: "later non-gate pending", change: { checkSecond: checkPage([{ ...passingNode, status: "IN_PROGRESS", conclusion: null }]) } },
+      { name: "unknown context", change: { checkSecond: checkPage([{ __typename: "FutureNode" }]) } },
+      { name: "changed page head", change: { checkSecond: checkPage([passingNode], { hasNextPage: false, endCursor: null }, "new-head") } },
+      { name: "changed final PR head", change: { freshFacts: { ...facts, headRefOid: "new-head" } } },
+      { name: "null pageInfo", change: { checkSecond: checkPage([passingNode], null) } },
+      { name: "nonboolean hasNextPage", change: { checkSecond: checkPage([passingNode], { hasNextPage: "false", endCursor: null }) } },
+      { name: "missing next cursor", change: { checkSecond: checkPage([passingNode], { hasNextPage: true, endCursor: null }) } },
+      { name: "cursor cycle", change: { checkSecond: checkPage([passingNode], { hasNextPage: true, endCursor: "next" }) } },
+      { name: "no owner gate in complete pages", change: { checkFirst: checkPage([passingNode]) } },
+      { name: "empty complete pages", change: { checkFirst: checkPage([]) } },
+      ...["SUCCESS", "PENDING"].flatMap(state => [
+        { name: `${state} draft`, change: { facts: { ...facts, isDraft: true }, commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] } },
+        { name: `${state} changes requested`, change: { facts: { ...facts, reviewDecision: "CHANGES_REQUESTED" }, commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] } },
+        { name: `${state} conflict`, change: { facts: { ...facts, mergeable: "CONFLICTING" }, commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] } },
+        { name: `${state} unresolved review`, change: { first: reviewPage({ hasNextPage: false, endCursor: null }, [{ id: "unresolved", isResolved: false, comments: { nodes: [] } }]), commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] } },
+        ...["FAILURE", "CANCELLED", "FUTURE_VALUE", "ACTION_REQUIRED"].map(checkState => ({
+          name: `${state} fast non-gate ${checkState}`, change: { fastChecks: [actionRequiredGate, { name: "build", state: checkState, bucket: "fail" }], commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] },
+        })),
+      ]),
+    ];
+    for (const { name, change } of cases) await t.test(name, async () => {
+      f.write(f.calls, ""); f.write(f.input, { ...base, ...change });
+      const r = runtime();
+      const result = await runSimple({ dependencies: { ...r.dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+      assert.equal(result.kind, "BLOCKER"); assert.notEqual(result.exitCode, 0);
+    });
+    for (const state of ["SUCCESS", "PENDING"]) await t.test(`${state} fast non-gate pending`, async () => {
+      f.write(f.input, { ...base, fastChecks: [actionRequiredGate, { name: "build", state: "PENDING", bucket: "pending" }], commits: [{ commit: { oid: "head", statusCheckRollup: { state } } }] });
+      const r = runtime();
+      const result = await runSimple({ dependencies: { ...r.dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options });
+      assert.equal(result.kind, "TIMEOUT"); assert.equal(result.exitCode, 5);
+    });
+  } finally { f.cleanup(); }
+});
+
+test("actual ACTION_REQUIRED queue waits for merge evidence", async () => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    const input = {
+      facts, first: reviewPage({ hasNextPage: false, endCursor: null }),
+      fastChecks: [actionRequiredGate], fastExit: 1,
+      commits: [{ commit: { oid: "head", statusCheckRollup: { state: "PENDING" } } }],
+      checkFirst: checkPage([ownerGateNode, passingNode]),
+    };
+    f.write(f.input, input);
+    const r = runtime();
+    const result = await runQueued({ dependencies: { ...r.dependencies, reader: new GhGitHubReader() }, contexts: [context], options });
+    assert.equal(result.kind, "TIMEOUT");
+    assert.equal(r.events.filter(event => event.kind === "WAITING").length, 1);
+    assert.equal(r.events.some(event => event.kind === "ADVANCE"), false);
+    f.write(f.input, { ...input, facts: { ...facts, state: "MERGED", mergedAt: "2026-09-06T00:00:00Z" } });
+    const merged = await runQueued({ dependencies: { ...runtime().dependencies, reader: new GhGitHubReader() }, contexts: [context], options });
+    assert.equal(merged.kind, "COMPLETE");
+  } finally { f.cleanup(); }
+});
+
+test("actual ACTION_REQUIRED cancellation settles the owned check-page command without READY", async () => {
+  const f = reviewGhFixture(), controller = new AbortController();
+  try {
+    f.write(f.input, {
+      facts: await fakeReader().pullRequest(context), first: reviewPage({ hasNextPage: false, endCursor: null }),
+      fastChecks: [actionRequiredGate], fastExit: 1,
+      commits: [{ commit: { oid: "head", statusCheckRollup: { state: "PENDING" } } }],
+      checkFirst: checkPage([ownerGateNode], { hasNextPage: true, endCursor: "next" }), hangChecks: true,
+    });
+    const r = runtime(), reader = new GhGitHubReader(controller.signal);
+    const running = runSimple({ dependencies: { ...r.dependencies, reader, signal: controller.signal }, contexts: [context], mode: "single", statusOnly: false, options });
+    const rejected = assert.rejects(running, /abort/i);
+    for (let i = 0; i < 200 && !existsSync(f.started); i++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.ok(existsSync(f.started)); controller.abort(); await rejected;
+    assert.equal(readFileSync(f.stopped, "utf8"), "settled");
+    assert.deepEqual(f.commands().at(-1)?.slice(-2), ["-f", "after=next"]);
+    assert.deepEqual(r.events, []);
+    const count = f.commands().length;
+    await assert.rejects(reader.checkRollupPage(context, "next"), /abort/i);
+    assert.equal(f.commands().length, count);
+  } finally { controller.abort(); f.cleanup(); }
+});
+
+test("owner-gate pending bucket rejects cancelled and unknown states through the actual reader", async (t) => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    for (const state of ["CANCELLED", "FUTURE_VALUE", "PENDING", "EXPECTED", "REQUESTED", "WAITING", "QUEUED", "IN_PROGRESS"]) await t.test(state, async () => {
+      f.write(f.calls, "");
+      f.write(f.input, {
+        facts, first: reviewPage({ hasNextPage: false, endCursor: null }),
+        fastChecks: [{ name: "Code Review Gate", state, bucket: "pending" }], fastExit: 8,
+        commits: [{ commit: { oid: "head", statusCheckRollup: { state: "SUCCESS" } } }],
+      });
+      const result = await runSimple({ dependencies: { ...runtime().dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+      assert.equal(result.kind, state === "CANCELLED" || state === "FUTURE_VALUE" ? "BLOCKER" : "READY");
+      if (result.kind === "READY") {
+        if (result.scope.kind !== "single" || result.scope.pr.kind !== "ready-pr") assert.fail("expected open-PR proof");
+        assert.equal(result.scope.pr.proof.mergeAuthorization, false);
+      } else assert.equal(result.exitCode, 4);
+    });
+  } finally { f.cleanup(); }
+});
+
+test("actual pending bucket validates owner-gate and non-gate states before readiness", async (t) => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    const cases = [
+      ...["Code Review Gate", "build"].flatMap(name =>
+        ["CANCELLED", "FUTURE_VALUE", "STALE", "SUCCESS", "NEUTRAL", "SKIPPED", "TIMED_OUT", "FAILURE", "ERROR", "COMPLETED", ""].map(state => ({ name, state, expected: "BLOCKER" }))
+      ),
+      ...["EXPECTED", "REQUESTED", "WAITING", "QUEUED", "PENDING", "IN_PROGRESS"].map(state => ({ name: "build", state, expected: "TIMEOUT" })),
+      { name: "Code Review Gate", state: "ACTION_REQUIRED", expected: "READY" },
+      { name: "build", state: "ACTION_REQUIRED", expected: "BLOCKER" },
+    ];
+    for (const { name, state, expected } of cases) await t.test(`${name} ${JSON.stringify(state)} in pending`, async () => {
+      f.write(f.calls, "");
+      f.write(f.input, {
+        facts, first: reviewPage({ hasNextPage: false, endCursor: null }),
+        fastChecks: [{ name, state, bucket: "pending" }], fastExit: 8,
+        commits: [{ commit: { oid: "head", statusCheckRollup: { state: "SUCCESS" } } }],
+      });
+      const result = await runSimple({ dependencies: { ...runtime().dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+      assert.equal(result.kind, expected);
+      assert.equal(result.exitCode, expected === "READY" ? 0 : expected === "TIMEOUT" ? 5 : 4);
+      if (result.kind === "READY") {
+        if (result.scope.kind !== "single" || result.scope.pr.kind !== "ready-pr") assert.fail("expected open-PR proof");
+        assert.equal(result.scope.pr.proof.mergeAuthorization, false);
+      }
+    });
+  } finally { f.cleanup(); }
+});
+
+test("actual fast-check buckets cannot turn unsafe states into READY", async (t) => {
+  const f = reviewGhFixture();
+  try {
+    const facts = await fakeReader().pullRequest(context);
+    const cases = [
+      { state: "SUCCESS", bucket: "pass", expected: "READY" },
+      { state: "NEUTRAL", bucket: "skipping", expected: "READY" },
+      { state: "SKIPPED", bucket: "skipping", expected: "READY" },
+      ...["pass", "skipping"].flatMap(bucket => ["CANCELLED", "PENDING", "FUTURE_VALUE"].map(state => ({ state, bucket, expected: "BLOCKER" }))),
+    ];
+    for (const { state, bucket, expected } of cases) await t.test(`${state} in ${bucket}`, async () => {
+      f.write(f.calls, "");
+      f.write(f.input, {
+        facts, first: reviewPage({ hasNextPage: false, endCursor: null }),
+        fastChecks: [actionRequiredGate, { name: "build", state, bucket }],
+      });
+      const result = await runSimple({ dependencies: { ...runtime().dependencies, reader: new GhGitHubReader() }, contexts: [context], mode: "single", statusOnly: false, options: { ...options, maxQueryErrors: 1 } });
+      assert.equal(result.kind, expected);
+      if (result.kind === "READY") {
+        if (result.scope.kind !== "single" || result.scope.pr.kind !== "ready-pr") assert.fail("expected open-PR proof");
+        assert.equal(result.scope.pr.proof.mergeAuthorization, false);
+      } else assert.equal(result.exitCode, 4);
+    });
+  } finally { f.cleanup(); }
 });

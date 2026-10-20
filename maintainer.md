@@ -6,14 +6,14 @@ piStack is a Pi-native fork of `cursor/plugins`, not a replacement agent runtime
 
 Read [the integration contract](pi/references/integration.md), [Pi usage and setup](pi/README.md), and [upstream provenance and qualification](pi/UPSTREAM.md) before changing behavior. Check Git status, branch, remotes, active workers, and whether this checkout is installed. Preserve unrelated work.
 
-0.15.23 refresh, based on `977f9e078f34cda30d8b103936f66a76d6e7c1e7`, on `update/pstack-dbf4981`:
+0.15.25 refresh, based on `929c9f8233fef6d9e4a13858a3d7e2e9cdd47aa4`, on `update/pstack-2f83774`:
 
 - Fork: `kimpers/pistack`. Published branch: `feat/pistack`. Upstream: `https://github.com/cursor/plugins.git`.
-- Imported pstack: `0.15.23`, commit `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454`. The previous import was `c47b12849e43f18d5c374c7069c744cc55b0ea00`.
-- Root package: private `pistack@0.1.0-dev.0`, with one extension, 53 explicitly listed skills, and 24 principles. Recheck these counts in `package.json` after updates.
-- [The current refresh inventory](pi/upstream-updates/dbf4981.md) accounts for 149 rename-aware upstream records, including all 90 changed pstack paths. [Qualification](pi/UPSTREAM.md) distinguishes current checks from historical acceptance.
+- Imported pstack: `0.15.25`, commit `2f8377461fd533f5af782e1fd643783b1067b847`. The previous import was `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454`.
+- Root package: private `pistack@0.1.0-dev.0`, with one extension, 54 explicitly listed skills, and 24 principles. Recheck these counts in `package.json` after updates.
+- [The current refresh inventory](pi/upstream-updates/2f83774.md) accounts for all 70 upstream paths, including 51 changed pstack paths. [Qualification](pi/UPSTREAM.md) distinguishes current checks from historical acceptance.
 
-`pi install /path/to/checkout` registers a live reference, not a copy. The owner's current installation instead uses a Git source pinned at `977f9e078f34cda30d8b103936f66a76d6e7c1e7`. Neither development checkout is the active package cache. Inspect effective settings before promotion and agree how to update the pin without changing source type implicitly. Develop in a separate worktree and leave installed source untouched until approval.
+`pi install /path/to/checkout` registers a live reference, not a copy. The owner's installation started this refresh with a Git source pinned at `977f9e078f34cda30d8b103936f66a76d6e7c1e7`. Neither development checkout is the active package cache. Inspect effective settings before promotion and agree how to update the pin without changing source type implicitly. Develop in a separate worktree and leave installed source untouched until approval.
 
 ## Find the implementation
 
@@ -21,7 +21,7 @@ Read [the integration contract](pi/references/integration.md), [Pi usage and set
 - `pi/extensions/pistack.ts` implements commands, dialogs, lifecycle hooks, and the checklist, history, reflection-destination, and model-resolution tools.
 - `pi/lib/setup.ts` owns inspection, approval proposals, installation receipts, destination checks, and helper readiness. `pi/dependencies.json` records candidate versions and reasons.
 - `pi/lib/models.ts` owns roles, capability validation, and approved effort selectors. `pi/lib/execution-profile.ts` supplies task-local policy to the plan checker.
-- `pi/lib/session-state.ts` restores mode and checklists from selected session ancestry. `pi/lib/history.ts` implements bounded read-only history and safe proposed learning destinations.
+- `pi/lib/session-state.ts` restores mode and checklists from selected session ancestry. `pi/lib/mode-default.ts` validates and atomically saves the separate user-wide new-session default. `pi/lib/history.ts` implements bounded read-only history and safe proposed learning destinations.
 - `pi/agents/profiles/` defines the implementation, comment-only, and read-only analyst agents. Their private skills resolve original sources through `pi/agents/skills/`.
 - `pi/references/` holds shared Pi contracts. Start with [delegation](pi/references/delegation.md), [runtime](pi/references/runtime.md), [verification](pi/references/verification.md), [history](pi/references/history.md), and [authoring](pi/references/authoring.md).
 - `pstack/skills/poteto-mode/` contains the router, playbooks, and retained helpers. Its `scripts/` contains orchestration, PR watching, bootstrap, the plan checker, and the audit entry point. `pi/lib/worktree-cleanup.mjs` supplies the read-only cleanup adapter.
@@ -32,7 +32,7 @@ Original `pstack/docs/guide/` files describe Cursor, not Pi usage. Keep the root
 ## Preserve the Pi contracts
 
 - User scope and permissions override every playbook. Installs, publication, destructive operations, and personal configuration changes need applicable approval. This guide grants none.
-- `/pistack on` enables guidance only. New sessions start off. Reload, resume, compaction, and forks restore selected ancestry, not sibling state. `/pistack off` does not stop shared workers or goals. Do not invent filename triggers or automatic goals.
+- `/pistack on` enables guidance only for the selected session branch. New sessions default off unless the user explicitly saves a default with `on --persist` or `off --persist`. Saved ancestry takes precedence. Reload, resume, compaction, and forks restore selected ancestry, not sibling state. `/pistack off` does not stop shared workers or goals. Do not invent filename triggers or automatic goals.
 - Reuse native pi-subagents, pi-goal, and interactive-shell. Keep one writer per checkout and independent review contexts. Preserve `PI_SUBAGENT_CHILD`, child tool ceilings, private skills, and user/project agent overrides. A failed worker launch or timeout requires preserved evidence and same-protocol recovery, not a CLI fallback.
 - Before delegation, discover executable agents and resolve roles through `pistack_models`. Pass `runs[].selector` as native `model`. Keep `runs[].model` as the registry identity. Reasoning uses `provider/id:level`, not a dispatch `thinking` field.
 - Preserve exact model IDs and saved panel sizes. New panels default to two inherited entries. Saved panels are not resized. Concurrency is separate. `unlimited` preserves configured/native effort. `large`, `medium`, and `small` target `xhigh`, `high`, and `medium` for explicit models. Only propose supported same-model reductions with disclosure and approval. Reject unknown support or capability drift instead of silently substituting models or effort. Inherit aliases retain native parent behavior.
@@ -58,7 +58,7 @@ For bugs, reproduce the failure before fixing it. Test public behavior, denied a
 5. Preserve `MERGE_HEAD` through validation. Stage resolved files for merge bookkeeping; review `git diff HEAD` so staged and unstaged edits are included. Do not run a broad reset merely to unstage a pending merge. Keep upstream commits as ancestry of the verified adaptation merge, without publishing a broken intermediate import.
 6. Complete adapters, manifests, callers, tests, provenance, README pins, and the support matrix as one coherent change. Review changed prose for duplicated steps, contradictory ownership, unsupported Cursor commands, and lost portable rules. The last refresh caught duplicated Babysit steps that restored `/loop`; numbering and forbidden-instruction regressions now guard that failure.
 7. Run the checks below. Obtain independent correctness and upstream-conversion reviews. Fix source-proven findings with failing-then-passing regressions, then recheck. A review's `ready` verdict means it completed, not that its findings permit promotion.
-8. After acceptance and publication authorization, commit, update the local installation, smoke-test the installed source, then push. This is the owner's chosen order. Preserve signing policy and use normal fast-forward updates and non-force pushes. Verify both upstream ancestry and the remote commit.
+8. Follow the owner's approved publication and installation order. For this refresh, independently verify, sign the commit, push, update only the existing installed Git pin, then smoke-test the installed source. Leave the personal mode default unchanged. Preserve signing policy and use normal fast-forward updates and non-force pushes. Verify both upstream ancestry and the remote commit.
 
 If a worker times out, first confirm it stopped. Capture tracked and untracked changes, index state, merge refs, logs, and its last checkpoint. Resume through the same native protocol in bounded phases. Do not redo a completed audit/merge or treat a partial handoff as accepted.
 

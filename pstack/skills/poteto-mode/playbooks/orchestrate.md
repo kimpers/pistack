@@ -2,6 +2,8 @@
 
 Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
 
+Before dispatch, assess task difficulty through [the approved model policy](../../../../pi/references/delegation.md#model-policy). Use the exact approved selector; a different effort, speed, or family needs explicit approval.
+
 
 **You own the program, never the code. Author briefs, drain the queue, keep the frontier green, decide.** For a whole project handed to one standing coordinator chat: multi-day, many stacked PRs, dozens to hundreds of subagents, the human checking in twice a day instead of every five minutes. One task driven to a predicate is Autonomous run. One ambitious run needing a bespoke workflow is figure-it-out. Route here when the work outlives any single agent. Work one agent could finish inside the session's budget is not a program; measured head-to-head, this playbook's ceremony turned a half-hour 12-unit job into 1 landed unit while a plain agent landed all 12. Below that line, route to Autonomous run.
 
@@ -15,7 +17,7 @@ Three rules carry the rest.
 
 #### Roles and placement
 
-- **Coordinator (this chat).** Local. Frames, authors briefs, drains the inbox, owns the human report, makes judgment calls. It never authors or edits code: conflicted merges, restacks, and code changes are always tasks. Mechanically landing a verified unit (fast-forward or clean cherry-pick of a worker's commit, then push) is bookkeeping the coordinator may do itself on repos where local git is cheap; queueing finished work behind an idle stacker is how a deadline harvests nothing. The loop is agentic end to end. Agents are launched, joined, paused and resumed only through native pi-subagents per the delegation contract. State reads and writes go through `scripts/orch/orch.ts` at drain points, one command in and one line out, to conserve context. The CLI never spawns, waits, or wakes anything.
+- **Coordinator (this chat).** Local. Frames, authors briefs, drains the inbox, owns the human report, makes judgment calls. It never authors or edits code: conflicted merges, chain rebases, and code changes are always tasks. Mechanically landing a verified unit (fast-forward or clean cherry-pick of a worker's commit, then push) is bookkeeping the coordinator may do itself on repos where local git is cheap; queueing finished work behind an idle stacker is how a deadline harvests nothing. The loop is agentic end to end. Agents are launched, joined, paused and resumed only through native pi-subagents per the delegation contract. State reads and writes go through `scripts/orch/orch.ts` at drain points, one command in and one line out, to conserve context. The CLI never spawns, waits, or wakes anything.
 - **Track ownership.** Keep one parent coordinator. A track is a logical queue grouping, not permission for packaged children to spawn. The parent can schedule independent local worker/verifier phases with bounded concurrency, returning summaries at wave boundaries.
 - **Worker / verifier.** Local Pi sessions only. Use one writer per cwd, native managed worktrees for independent mutations and isolated app state for live verification. Use configured roles and prefer a different-family verifier; disclose same-model limitations. MCP/browser/PTY verification requires an already discovered profile with explicit tools and loaded provider. Missing tools block the lane, not permission to widen it.
 
@@ -46,7 +48,8 @@ CONTEXT      pointers to files and PRs; upstream reports pasted in full when thi
 ACCEPTANCE   checkable criteria, one per line
 VERIFY       exact commands or the control-skill path, plus known gotchas
 TIMEBOX      rough cap on runtime; on expiry, return partial findings and stop rather than run on
-FORBIDDEN    no gt, no rebase, no force-push, no fixes outside scope, plus unit-specific bans
+FORBIDDEN    no PR retargets or merges, no rebase, no force-push, no fixes outside scope,
+             plus unit-specific bans
 REPORT       status, branch, head SHA, PRs, verdict, what you actually ran, deviations,
              suggested follow-ups
 STANDING     <preferences.md pasted verbatim>
@@ -79,8 +82,8 @@ A dependency is a context relay, not just ordering: undeclared upstream context 
 
 #### Stack safety
 
-- The frontier is a computed object, never narrative. `orch frontier set --repo <repo> --prs <bottom-to-top PRs>` resolves gh base-branch topology and records branch names, forge head SHAs and a generation number. Recheck exact base/head SHAs independently before landing. Without `--prs` it discovers the current open linear stack. Missing, ambiguous or stale topology blocks landing; Graphite is not required.
-- Exactly one parent-owned topology writer per stack may rebase/retarget. Workers never mutate topology. Babysitters follow `playbooks/babysit.md` against the pinned frontier generation and report conflicts to the owner rather than restacking.
+- The frontier is a computed object, never narrative. `orch frontier set --repo <repo> --prs <bottom-to-top PRs>` resolves gh base-branch topology and records branch names, forge head SHAs and a generation number. Recheck exact base/head SHAs independently before landing. Without `--prs` it discovers the current open linear stack. Missing, ambiguous or stale topology blocks landing; Graphite is not required. The retained helper is GitHub-only. Bounded discovery, cross-repository rejection, and double observation protect its frozen pins. Never substitute local branch SHAs for forge head SHAs. Helper-dependent steps are unavailable on Origin; never combine Origin topology with gh proof. Separately authorized Origin CLI playbooks remain separate from this helper.
+- Exactly one parent-owned topology writer per stack may rebase, force-push, retarget, close, or merge. Workers never rebase, retarget, or merge PRs. Babysitters follow `playbooks/babysit.md` against the pinned frontier generation and report conflicts to the owner rather than restacking.
 - PR closes and retargets go through the stacker only; closing a base PR orphans every chain above it. Merges and stack surgery are units with briefs like any other.
 - One retro watcher follows merged PRs for reverts, post-merge CI breaks, and orphaned follow-ups.
 

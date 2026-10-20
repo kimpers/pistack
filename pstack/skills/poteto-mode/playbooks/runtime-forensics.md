@@ -2,6 +2,8 @@
 
 Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
 
+Before dispatch, assess task difficulty through [the approved model policy](../../../../pi/references/delegation.md#model-policy). Use the exact approved selector; a different effort, speed, or family needs explicit approval.
+
 
 **You own the diagnosis. Instrument the live process, don't theorize from source.** For "why is X leaking / spinning / slow at runtime", heap snapshots, idle-but-busy processes, intermittent glitches. The deliverable is a cited diagnosis, not a fix.
 

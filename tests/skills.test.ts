@@ -27,7 +27,8 @@ test("actual Pi loader exposes every selected direct skill, hides principle leav
     await loader.reload();
     const { skills, diagnostics } = loader.getSkills();
     assert.deepEqual(diagnostics, []);
-    assert.equal(skills.length, 54);
+    assert.equal(entries.length, 54);
+    assert.equal(skills.length, 55, "54 packaged skills plus the project fixture skill");
     const catalog = new Map(skills.map(s => [s.name, s]));
     for (const path of entries) {
       const name = /\/([^/]+)\/SKILL.md$/.exec(path)![1];
@@ -106,7 +107,7 @@ test("Bugbot prose paths resolve from the declared skill base, including generat
 });
 
 test("active instructions reject obsolete tool/model/cloud/path and unsafe cleanup recipes", () => {
-  const forbidden = /\/loop\b|\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:|^<<<<<<< |^=======\s*$|^>>>>>>> |`generalPurpose`|`readonly: false`/m;
+  const forbidden = /\/loop\b|\.cursor\/|agent-transcripts\/|subagent_type|run_in_background|cloud_base_branch|environment:\s*["']cloud|`Task`|Task tool|AskQuestion|grok-4\.|claude-fable|gpt-5\.6-sol|claude-opus-5|Cursor's built-in|git reset --hard|git worktree remove --force|rm -rf|simctl.*delete all|^paths:|^<<<<<<< |^=======\s*$|^>>>>>>> |`generalPurpose`|`readonly: false`|Pick each subagent's reasoning level and fast or standard speed|use its nearest slug/m;
   for (const file of activeMarkdown) assert.doesNotMatch(read(file), forbidden, file);
   for (const poison of ["`/loop`", "`Task`", "environment: \"cloud\"", "git reset --hard", "paths: [x]", "~/.cursor/skills/x"]) assert.match(poison, forbidden);
   assert.match(read("pi/references/integration.md"), /Explicit task limits and harness permissions override/);
@@ -117,12 +118,12 @@ test("portable principle bodies and review rubrics are retained, with only appro
   const adapted = new Set(["principle-build-the-lever", "principle-encode-lessons-in-structure", "principle-never-block-on-the-human", "principle-sequence-verifiable-units"]);
   for (const entry of entries.filter(p => p.includes("/principle-"))) {
     const name = entry.split("/").at(-2)!; if (adapted.has(name)) continue;
-    const original = execFileSync("git", ["show", `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
+    const original = execFileSync("git", ["show", `2f8377461fd533f5af782e1fd643783b1067b847:${entry.slice(2)}`], { cwd: root, encoding: "utf8" });
     assert.equal(read(entry).replace(`\n\n${integration}\n`, ""), original, name);
   }
   for (const path of ["interrogate/references/code-quality-review.md", "interrogate/references/lead-judgment.md", "why/references/epistemics.md", "typescript-best-practices/references/patterns.md"]) {
     const file = `pstack/skills/${path}`;
-    assert.equal(read(file), execFileSync("git", ["show", `dbf49813a39c1a5389c5e28cb8e4c1c2379e2454:${file}`], { cwd: root, encoding: "utf8" }), file);
+    assert.equal(read(file), execFileSync("git", ["show", `2f8377461fd533f5af782e1fd643783b1067b847:${file}`], { cwd: root, encoding: "utf8" }), file);
   }
   assert.match(read("pstack/skills/deslop/LICENSE"), /Copyright \(c\) 2026 Cursor/);
   assert.match(read("pstack/skills/deslop/SKILL.md"), /cursor-team-kit at `93b00b89/);
@@ -151,8 +152,19 @@ test("0.15.23 additions use direct Pi resources and bounded read-only help and r
     assert.doesNotMatch(text, /cursor\/plugins\/blob\/main|docs\/guide|Custom Mode|\/visualize|\[[^\]\n]*make-bot-ui[^\]\n]*\]\(/);
   }
   const recap = read("pstack/skills/ketchup/SKILL.md");
-  for (const phrase of ["selected ancestry", "last actual user message", "native run status", "under 250 words", "No screenshot yet", "read-only", "before their last message"]) assert.ok(recap.includes(phrase), phrase);
+  for (const phrase of ["selected ancestry", "last actual user message", "native run status", "well under 150 words", "No screenshot yet", "read-only", "before their last message"]) assert.ok(recap.includes(phrase), phrase);
   assert.match(read("pstack/skills/in-your-own-words/SKILL.md"), /does not authorize execution or enable persistent mode/);
+});
+
+test("packaged help and setup distinguish session mode from the optional new-session default", () => {
+  for (const name of ["poteto-help", "setup-pstack"]) {
+    const body = read(`pstack/skills/${name}/SKILL.md`);
+    assert.match(body, /\/pistack on --persist/);
+    assert.match(body, /\/pistack off --persist/);
+    assert.match(body, /initially off/i);
+    assert.match(body, /selected ancestry.*precedence/i);
+    assert.doesNotMatch(body, /new sessions start off/i);
+  }
 });
 
 test("measurement and correction skills retain proof and authority boundaries", () => {
@@ -164,4 +176,31 @@ test("measurement and correction skills retain proof and authority boundaries", 
   assert.doesNotMatch(correct, /one commit each|Repeat this each time|File each Backlog/);
   const number = read("pstack/skills/principle-explain-the-number/SKILL.md");
   assert.match(number, /benchmark-checklist/);
+});
+
+test("Sharpen is a direct-only resource that cannot loosen the user's restrictions", () => {
+  assert.ok(entries.includes("./pstack/skills/sharpen/SKILL.md"));
+  const body = read("pstack/skills/sharpen/SKILL.md");
+  assert.match(body, /disable-model-invocation: true/);
+  assert.ok(body.includes(integration));
+  for (const phrase of ["outside check", "user's restrictions", "explicit approval", "does not enable mode", "Don't hand back a rewritten prompt"]) assert.ok(body.includes(phrase), phrase);
+  assert.match(read("pstack/skills/poteto-help/SKILL.md"), /\[sharpen\]\(\.\.\/sharpen\/SKILL.md\)/);
+  assert.match(read("pstack/skills/poteto-help/references/recipes.md"), /\/skill:sharpen/);
+});
+
+test("Ketchup explains changes without manufacturing work or decorative status diagrams", () => {
+  const body = read("pstack/skills/ketchup/SKILL.md");
+  for (const phrase of ["well under 150 words", "what changed for the user", "Never draw a status list", "at most six boxes", "at most eight words", "two lines", "unasked irreversible", "inline", "read-only"]) assert.ok(body.includes(phrase), phrase);
+  assert.doesNotMatch(body, /under 250 words|Show one visual of touched PRs/);
+});
+
+test("0.15.25 inventory accounts for every changed upstream path and distribution boundary", () => {
+  const paths = execFileSync("git", ["diff", "--name-only", "dbf49813a39c1a5389c5e28cb8e4c1c2379e2454", "2f8377461fd533f5af782e1fd643783b1067b847"], { cwd: root, encoding: "utf8" }).trim().split("\n");
+  const body = read("pi/upstream-updates/2f83774.md");
+  const rows = [...body.matchAll(/^\| `([^`]+)` \| (portable|adapted|raw|excluded) \|/gm)];
+  assert.equal(rows.length, 70);
+  assert.equal(rows.filter(row => row[1].startsWith("pstack/")).length, 51);
+  assert.deepEqual(rows.map(row => row[1]).sort(), paths.sort());
+  for (const row of rows.filter(row => row[1].startsWith("third_party/"))) assert.equal(row[2], "excluded");
+  for (const phrase of ["GitHub-only", "double observation", "ACTION_REQUIRED", "FAILURE", "ERROR", "mergeAuthorization: false", "native settlement", "54 packaged", "24 principles"]) assert.ok(body.includes(phrase), phrase);
 });

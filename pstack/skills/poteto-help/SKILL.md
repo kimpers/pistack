@@ -18,7 +18,7 @@ This map routes to files that own the details. Read the destination before quoti
 
 Infer the need from the message. If unclear, ask one question about setup, starting a task, choosing a skill, fixing a run, or customization. Answer only the relevant section.
 
-Inspect only state that changes the answer. `/pistack status` reports mode; `/pistack doctor` is passive inspection and names the effective config destination and capability gaps. A missing user config alone does not prove setup never ran: trusted project config may replace it. Read the effective configuration through [delegation](../../../pi/references/delegation.md), not personal defaults guessed from a directory.
+Inspect only state that changes the answer. `/pistack status` reports session mode and the new-session default; `/pistack doctor` is passive inspection and names the effective config destination and capability gaps. A missing user config alone does not prove setup never ran: trusted project config may replace it. Read the effective configuration through [delegation](../../../pi/references/delegation.md), not personal defaults guessed from a directory.
 
 If model setup matters, offer `/pistack setup` once. The user can defer it and keep inherited role choices. If proof is the question and the project has no usable app harness, mention [create-verification-skill](../create-verification-skill/SKILL.md). Missing tools remain gaps.
 
@@ -33,7 +33,7 @@ Review panels and parallel workers cost tokens. Smaller approved panels or cheap
 
 ## Start a task
 
-`/skill:poteto-mode` is task-local. `/pistack on` persists guidance on this session branch, `/pistack off` stops future guidance, and new sessions start off. Mode alone creates no worker or goal. Direct skill invocation does not turn it on.
+`/skill:poteto-mode` is task-local. Plain `/pistack on` and `/pistack off` change guidance only on this session branch. `/pistack on --persist` and `/pistack off --persist` also save the user-wide new-session default, initially off. Saved selected ancestry takes precedence over that default. Before a conversation, Pi buffers session state, so it survives in-process reload but is not restart-persisted. Mode alone creates no worker or goal. Off does not stop shared workers or goals. Direct skill invocation does not enable mode or change the default.
 
 Mode selects a playbook and records its steps in `pistack_checklist`. Skipped steps retain a reason. A good prompt names the goal, proof, and constraints rather than prescribing every skill. Read [prompting](references/prompting.md) before drafting one. Say "new task" when the subject changes. A child receives one assigned phase; the parent owns routing, fanout, joins, and acceptance through [native delegation](../../../pi/references/delegation.md).
 
@@ -45,11 +45,12 @@ Use `/skill:poteto-mode` for a rigorous multi-step task. Recommend a direct skil
 |---|---|
 | A rigorous task workflow | [poteto-mode](../poteto-mode/SKILL.md) |
 | Restate goals before work starts | [in-your-own-words](../in-your-own-words/SKILL.md) |
+| Improve a task's approach without widening its authority | [sharpen](../sharpen/SKILL.md) |
 | Explain current mechanics or placement | [how](../how/SKILL.md) |
 | Investigate rationale or a number's origin | [why](../why/SKILL.md) |
 | Explain a change plainly | [teach](../teach/SKILL.md) |
 | Recover recent workspace context | [recall](../recall/SKILL.md) |
-| Recap this selected session since the last user message | [ketchup](../ketchup/SKILL.md) |
+| Explain changes since the last user message in plain sentences and small visuals | [ketchup](../ketchup/SKILL.md) |
 | Prove what a small diff could break elsewhere | [blast-radius](../blast-radius/SKILL.md) |
 | Settle types and module shape | [architect](../architect/SKILL.md) |
 | Compare independent attempts at one brief | [arena](../arena/SKILL.md) |
@@ -104,7 +105,7 @@ The 24 principles are hidden direct skills in the [index](../../../pi/references
 
 | Symptom | Next step |
 |---|---|
-| Guidance did not persist | Check `/pistack status`; direct skills are task-local. Use `/pistack on` if desired. |
+| Guidance did not persist | Check `/pistack status` for both session mode and the new-session default. Use `/pistack on` for this branch or `/pistack on --persist` to also enable eligible new sessions. Plain `off` leaves the saved default unchanged; use `/pistack off --persist` to save an OFF default. |
 | A question became continuation of old work | Say "new task" or narrow this turn to a read-only answer. |
 | Model changes did not apply | Inspect effective scope with doctor, approve setup, and resolve `pistack_models` again before dispatch. |
 | Cost is too high | Review panel size, concurrency, and discovered role choices separately. |

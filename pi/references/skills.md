@@ -47,6 +47,7 @@ Resolve name-only references below and read the complete leaf before applying it
 - [recall](../../pstack/skills/recall/SKILL.md)
 - [reflect](../../pstack/skills/reflect/SKILL.md)
 - [setup-pstack](../../pstack/skills/setup-pstack/SKILL.md)
+- [sharpen](../../pstack/skills/sharpen/SKILL.md)
 - [show-me-your-work](../../pstack/skills/show-me-your-work/SKILL.md)
 - [swarm](../../pstack/skills/swarm/SKILL.md)
 - [tdd](../../pstack/skills/tdd/SKILL.md)

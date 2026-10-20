@@ -1,17 +1,30 @@
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { getAgentDir, VERSION, BorderedLoader, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { availableModelIds, budgets, modelId, proposeBudget, resolveRole, retireModelRoles, roleDefaults, validateModelPolicy, type Budget, type Role } from "../lib/models.ts";
 import { applyProposal, buildProposal, dependencyManifest, formatProposal, helperStatus, inspectSetup, inspectPrerequisites, loadConfig, type SetupPaths } from "../lib/setup.ts";
 import { emptyState, formatState, restoreState, STATE_TYPE, updateChecklist, type ChecklistAction, type ModeState } from "../lib/session-state.ts";
 
 import { readHistory, reflectionDestination } from "../lib/history.ts";
+import { readModeDefault, writeModeDefault } from "../lib/mode-default.ts";
+
+function isFreshStartup(manager: ExtensionContext["sessionManager"]): boolean {
+  const header = manager.getHeader();
+  if (!header || header.parentSession || manager.getEntries().some(entry => entry.type !== "model_change" && entry.type !== "thinking_level_change")) return false;
+  const path = manager.getSessionFile();
+  if (!path) return true;
+  try { lstatSync(path); return false; }
+  catch (error) { return error instanceof Error && "code" in error && error.code === "ENOENT"; }
+}
 
 const guidePath = fileURLToPath(new URL("../references/integration.md", import.meta.url));
-const help = "/pistack on | off | status | setup | setup cancel | doctor | doctor verify | checklist\nNew sessions start off. Off stops piStack guidance only, not shared goals/workers. Use /goal pause and pi-subagents stop for their owned work.";
+const offWarning = "Off stops piStack guidance only, not shared goals/workers. Use /goal pause and pi-subagents stop for their owned work.";
+const bufferingNotice = "Before a conversation, Pi buffers session state: it survives in-process reload, but is not restart-persisted.";
+const help = `/pistack on | off | on --persist | off --persist | status | setup | setup cancel | doctor | doctor verify | checklist\nPlain on/off changes this session only. --persist also saves the user-wide new-session default, initially OFF. Saved selected ancestry takes precedence. Mode starts no work. ${offWarning}\n${bufferingNotice}`;
 
 export default function pistack(pi: ExtensionAPI) {
   let state: ModeState = emptyState();
@@ -32,18 +45,48 @@ export default function pistack(pi: ExtensionAPI) {
   const render = (ctx: ExtensionContext) => {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus("pistack", state.enabled ? "piStack ON · /pistack off" : "piStack off");
-    const lines = formatState(state).split("\n");
-    ctx.ui.setWidget("pistack-checklist", state.items.length ? [...lines.slice(0, 8), ...(lines.length > 8 ? ["… /pistack checklist for all steps"] : [])] : undefined);
+    if (ctx.mode !== "tui") return;
+    const done = state.items.filter(item => item.status === "done").length;
+    const skipped = state.items.filter(item => item.status === "skipped").length;
+    const pending = state.items.length - done - skipped;
+    const next = state.items.find(item => item.status === "pending");
+    const lines = [`Checklist · ${done} done · ${skipped} skipped · ${pending} pending · /pistack checklist`];
+    if (next) lines.push(`Next #${next.id}: ${next.text}`);
+    ctx.ui.setWidget("pistack-checklist", state.items.length ? () => ({
+      render: (width: number) => lines.map(line => truncateToWidth(line.replace(/\s+/g, " ").trim(), width)),
+      invalidate() {},
+    }) : undefined);
   };
-  const restore = (ctx: ExtensionContext) => {
-    try { state = restoreState(ctx.sessionManager.getBranch()); }
+  const restore = (ctx: ExtensionContext): boolean => {
+    let initialized = true;
+    try {
+      const branch = ctx.sessionManager.getBranch();
+      state = restoreState(branch);
+      initialized = branch.some(entry => entry.type === "custom" && entry.customType === STATE_TYPE);
+    }
     catch (error) { state = emptyState(); report(ctx, `piStack state invalid; guidance OFF: ${String(error)}`, "error"); }
     render(ctx);
+    return initialized;
   };
-  const save = (ctx: ExtensionContext, next: ModeState) => { pi.appendEntry(STATE_TYPE, next); state = next; render(ctx); };
-  pi.on("session_start", (event, ctx) => { if (event.reason === "new") { state = emptyState(); render(ctx); } else restore(ctx); });
-  pi.on("session_tree", (_event, ctx) => restore(ctx));
-  pi.on("session_compact", (_event, ctx) => restore(ctx));
+  const save = (ctx: ExtensionContext, next: ModeState) => {
+    try { pi.appendEntry(STATE_TYPE, next); }
+    catch (error) { restore(ctx); throw error; }
+    state = next; render(ctx);
+  };
+  pi.on("session_start", (event, ctx) => {
+    if (restore(ctx) || !(event.reason === "new" || (event.reason === "startup" && isFreshStartup(ctx.sessionManager)))) return;
+    let enabled = false;
+    try { enabled = readModeDefault(getAgentDir()); }
+    catch (error) { report(ctx, `New-session default invalid or unavailable; guidance OFF: ${String(error)}`, "error"); }
+    try { save(ctx, { ...emptyState(), enabled }); }
+    catch (error) {
+      const message = `Mode initialization failed. Observed current session: ${formatState(state)}. Session durability unconfirmed: ${String(error)}`;
+      if (!ctx.hasUI) throw new Error(message);
+      report(ctx, message, "error");
+    }
+  });
+  pi.on("session_tree", (_event, ctx) => { restore(ctx); });
+  pi.on("session_compact", (_event, ctx) => { restore(ctx); });
   pi.on("session_shutdown", () => { alive = false; setupController?.abort(); });
   pi.on("session_before_switch", (_event, ctx) => { if (setupController) { report(ctx, "Cancel or finish setup before switching sessions", "warning"); return { cancel: true }; } });
   pi.on("session_before_fork", (_event, ctx) => { if (setupController) { report(ctx, "Cancel or finish setup before forking", "warning"); return { cancel: true }; } });
@@ -216,14 +259,40 @@ export default function pistack(pi: ExtensionAPI) {
     } finally { if (setupController === controller) setupController = undefined; }
   }
   pi.registerCommand("pistack", {
-    description: "Opt-in piStack mode, persistent checklist, setup and doctor",
-    getArgumentCompletions: prefix => ["on", "off", "status", "setup", "setup cancel", "doctor", "doctor verify", "checklist"].filter(value => value.startsWith(prefix)).map(value => ({ value, label: value })),
+    description: "piStack session mode, optional new-session default, checklist, setup and doctor",
+    getArgumentCompletions: prefix => ["on", "off", "on --persist", "off --persist", "status", "setup", "setup cancel", "doctor", "doctor verify", "checklist"].filter(value => value.startsWith(prefix)).map(value => ({ value, label: value.endsWith("--persist") ? `${value} (session and user-wide new-session default)` : value === "on" || value === "off" ? `${value} (session only)` : value })),
     handler: async (args, ctx) => {
+      const action = args.trim();
+      if (["on", "off", "on --persist", "off --persist"].includes(action)) {
+        restore(ctx);
+        const enabled = action.startsWith("on");
+        const persist = action.endsWith("--persist");
+        if (persist) {
+          try { writeModeDefault(getAgentDir(), enabled); }
+          catch (error) { report(ctx, `New-session default not saved; session unchanged: ${String(error)}`, "error"); return; }
+        }
+        const savedDefault = persist ? `User-wide new-session default saved: ${enabled ? "ON" : "OFF"}.\n` : "";
+        try { save(ctx, { ...state, enabled }); }
+        catch (error) {
+          const message = `${savedDefault}Observed current session: ${formatState(state)}. Session durability unconfirmed: ${String(error)}\n${offWarning}`;
+          if (!ctx.hasUI) throw new Error(message);
+          report(ctx, message, "error");
+          return;
+        }
+        report(ctx, `${savedDefault}Current session: ${formatState(state)}\n${bufferingNotice}${enabled ? "" : `\n${offWarning}`}`);
+        return;
+      }
       try {
-        switch (args.trim()) {
-          case "on": restore(ctx); save(ctx, { ...state, enabled: true }); report(ctx, formatState(state)); break;
-          case "off": restore(ctx); save(ctx, { ...state, enabled: false }); report(ctx, "piStack OFF. Shared goals/workers are not stopped. /goal pause or pi-subagents stop controls them."); break;
-          case "status": case "checklist": restore(ctx); report(ctx, formatState(state)); break;
+        switch (action) {
+          case "status": {
+            restore(ctx);
+            let preference: string;
+            try { preference = readModeDefault(getAgentDir()) ? "ON" : "OFF"; }
+            catch (error) { preference = `unavailable: ${String(error)}`; }
+            report(ctx, `Current session: ${formatState(state)}\nUser-wide new-session default: ${preference}\n${offWarning}`);
+            break;
+          }
+          case "checklist": restore(ctx); report(ctx, formatState(state)); break;
           case "setup": await setup(ctx); break;
           case "setup cancel": setupController?.abort(); report(ctx, "Setup cancellation requested; inspect partial changes before retry"); break;
           case "doctor": await doctor(ctx); break;

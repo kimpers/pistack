@@ -2,6 +2,8 @@
 
 Read [the Pi integration contract](../../../../pi/references/integration.md) first. Paths in prose are relative to the poteto-mode skill directory unless explicitly linked.
 
+Before dispatch, assess task difficulty through [the approved model policy](../../../../pi/references/delegation.md#model-policy). Use the exact approved selector; a different effort, speed, or family needs explicit approval.
+
 
 **You own the resume point. Read the prior trail before redoing work.** For taking over a scoped Pi session, local run/checkpoint or authorized branch. Read [history](../../../../pi/references/history.md) and [runtime](../../../../pi/references/runtime.md). No cloud dashboard, global transcript scan or automatic goal restart.
 

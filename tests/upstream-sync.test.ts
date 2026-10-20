@@ -9,7 +9,8 @@ import { auditPackage, upstreamChanges } from "./upstream-sync-support.ts";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const originalBaseline = "93b00b89ef425a9c1bac0d0b317dfc49c930ac99";
 const previousBaseline = "c47b12849e43f18d5c374c7069c744cc55b0ea00";
-const baseline = "dbf49813a39c1a5389c5e28cb8e4c1c2379e2454";
+const lastBaseline = "dbf49813a39c1a5389c5e28cb8e4c1c2379e2454";
+const baseline = "2f8377461fd533f5af782e1fd643783b1067b847";
 const rubric = "pstack/skills/interrogate/references/rubric.md";
 const skill = "pstack/skills/principle-model-the-domain/SKILL.md";
 const helpers = "pstack/skills/poteto-mode/scripts/package.json";
@@ -129,7 +130,7 @@ test("frozen refresh dispositions cover every upstream path and deleted how crit
 });
 
 test("0.15.23 inventory covers 90 pstack paths and preserves excluded monorepo bytes", () => {
-  const target = baseline;
+  const target = lastBaseline;
   const changed = upstreamChanges(root, previousBaseline, target).changes;
   const pstack = changed.filter(c => c.path.startsWith("pstack/"));
   assert.equal(pstack.length, 90);
@@ -144,7 +145,7 @@ test("0.15.23 inventory covers 90 pstack paths and preserves excluded monorepo b
     assert.ok(inventory.includes(`\`${change.path}\``), change.path);
     if (change.path === "README.md") continue;
     if (change.status === "D") assert.equal(existsSync(join(root, change.path)), false, change.path);
-    else assert.deepEqual(readFileSync(join(root, change.path)), execFileSync("git", ["show", `${target}:${change.path}`], { cwd: root }), change.path);
+    else assert.deepEqual(readFileSync(join(root, change.path)), execFileSync("git", ["show", `${baseline}:${change.path}`], { cwd: root }), change.path);
   }
   for (const path of ["pstack/LICENSE", "cursor-team-kit/LICENSE", "cursor-team-kit/skills/deslop/SKILL.md", "pstack/skills/poteto-mode/scripts/bun.lock"]) {
     assert.equal(execFileSync("git", ["diff", previousBaseline, target, "--", path], { cwd: root, encoding: "utf8" }), "", path);
@@ -152,4 +153,20 @@ test("0.15.23 inventory covers 90 pstack paths and preserves excluded monorepo b
   }
   for (const path of ["pstack/skills/deslop/SKILL.md", "pstack/skills/deslop/LICENSE"]) assert.deepEqual(readFileSync(join(root, path)), execFileSync("git", ["show", `HEAD:${path}`], { cwd: root }), path);
   assert.deepEqual(readFileSync(join(root, helpers)), execFileSync("git", ["show", `${target}:${helpers}`], { cwd: root }));
+});
+
+test("0.15.25 inventory covers all 70 upstream paths and preserves raw and excluded bytes", () => {
+  const changed = upstreamChanges(root, lastBaseline, baseline).changes;
+  assert.equal(changed.length, 70);
+  assert.equal(changed.filter(c => c.path.startsWith("pstack/")).length, 51);
+  const inventory = readFileSync(join(root, "pi/upstream-updates/2f83774.md"), "utf8");
+  const rows = [...inventory.matchAll(/^\| `([^`]+)` \| (portable|adapted|raw|excluded) \|/gm)];
+  assert.deepEqual(rows.map(row => row[1]).sort(), changed.map(c => c.path).sort());
+  for (const row of rows.filter(row => row[2] === "raw" || row[2] === "excluded")) {
+    assert.deepEqual(readFileSync(join(root, row[1])), execFileSync("git", ["show", `${baseline}:${row[1]}`], { cwd: root }), row[1]);
+  }
+  assert.deepEqual(changed.filter(c => c.status === "A" && c.path.startsWith("pstack/")).map(c => c.path), ["pstack/skills/sharpen/SKILL.md"]);
+  for (const path of ["pstack/LICENSE", "cursor-team-kit/skills/deslop", helpers, "pstack/skills/poteto-mode/scripts/bun.lock"]) {
+    assert.equal(execFileSync("git", ["diff", lastBaseline, baseline, "--", path], { cwd: root, encoding: "utf8" }), "", path);
+  }
 });

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { getAgentDir, VERSION, BorderedLoader, type ExtensionAPI, type ExtensionContext, type ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { availableModelIds, budgets, modelId, proposeBudget, resolveRole, retireModelRoles, roleDefaults, validateModelPolicy, type Budget, type Role } from "../lib/models.ts";
 import { applyProposal, buildProposal, dependencyManifest, formatProposal, helperStatus, inspectSetup, inspectPrerequisites, loadConfig, type SetupPaths } from "../lib/setup.ts";
@@ -44,8 +45,17 @@ export default function pistack(pi: ExtensionAPI) {
   const render = (ctx: ExtensionContext) => {
     if (!ctx.hasUI) return;
     ctx.ui.setStatus("pistack", state.enabled ? "piStack ON · /pistack off" : "piStack off");
-    const lines = formatState(state).split("\n");
-    ctx.ui.setWidget("pistack-checklist", state.items.length ? [...lines.slice(0, 8), ...(lines.length > 8 ? ["… /pistack checklist for all steps"] : [])] : undefined);
+    if (ctx.mode !== "tui") return;
+    const done = state.items.filter(item => item.status === "done").length;
+    const skipped = state.items.filter(item => item.status === "skipped").length;
+    const pending = state.items.length - done - skipped;
+    const next = state.items.find(item => item.status === "pending");
+    const lines = [`Checklist · ${done} done · ${skipped} skipped · ${pending} pending · /pistack checklist`];
+    if (next) lines.push(`Next #${next.id}: ${next.text}`);
+    ctx.ui.setWidget("pistack-checklist", state.items.length ? () => ({
+      render: (width: number) => lines.map(line => truncateToWidth(line.replace(/\s+/g, " ").trim(), width)),
+      invalidate() {},
+    }) : undefined);
   };
   const restore = (ctx: ExtensionContext): boolean => {
     let initialized = true;

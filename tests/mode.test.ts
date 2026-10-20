@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { SessionManager, createEventBus } from "@earendil-works/pi-coding-agent";
+import { Text, visibleWidth } from "@earendil-works/pi-tui";
 import pistack, { pingSubagents } from "../pi/extensions/pistack.ts";
 import { STATE_TYPE, emptyState, restoreState, updateChecklist } from "../pi/lib/session-state.ts";
 import { defaultModels } from "../pi/lib/models.ts";
@@ -12,14 +13,15 @@ import { fixture } from "./fixtures.ts";
 function harness(f: ReturnType<typeof fixture>, manager = SessionManager.create(f.paths.cwd, join(f.root, "sessions"))) {
   const events = new Map<string, Function>(); const tools = new Map<string, any>(); let command: any;
   const messages: string[] = [], prompts: string[] = [], work: unknown[] = [], messageOptions: unknown[] = [];
+  const widgets = new Map<string, any>();
   const bus = createEventBus(), emit = bus.emit.bind(bus);
   bus.emit = (name, data) => { work.push({ event: name, data }); emit(name, data); };
   const pi: any = { on: (name: string, fn: Function) => events.set(name, fn), events: bus, registerTool: (tool: any) => tools.set(tool.name, tool), registerCommand: (_name: string, cmd: any) => { command = cmd; }, appendEntry: (type: string, data: unknown) => manager.appendCustomEntry(type, data), sendMessage: (m: any, options: unknown) => { messages.push(m.content); messageOptions.push(options); }, sendUserMessage: (text: string) => prompts.push(text), getAllTools: () => [], getActiveTools: () => [], setActiveTools: (...args: unknown[]) => work.push({ activate: args }), exec: (...args: unknown[]) => work.push({ exec: args }) };
   const parent = { provider: "fixture", id: "available" };
-  const ctx: any = { cwd: f.paths.cwd, sessionManager: manager, model: parent, modelRegistry: { getAvailable: () => [parent] }, scopedModels: [], isProjectTrusted: () => true, hasUI: true, mode: "rpc", ui: { notify: (text: string) => messages.push(text), setStatus() {}, setWidget() {}, select: async () => undefined, confirm: async () => false, input: async () => undefined } };
+  const ctx: any = { cwd: f.paths.cwd, sessionManager: manager, model: parent, modelRegistry: { getAvailable: () => [parent] }, scopedModels: [], isProjectTrusted: () => true, hasUI: true, mode: "rpc", ui: { notify: (text: string) => messages.push(text), setStatus() {}, setWidget: (key: string, content: any) => widgets.set(key, content), select: async () => undefined, confirm: async () => false, input: async () => undefined } };
   ctx.executeTool = (...args: unknown[]) => work.push({ tool: args });
   pistack(pi);
-  return { events, tools, pi, ctx, messages, prompts, manager, completions: (prefix: string) => command.getArgumentCompletions(prefix), assertNoWork: () => { assert.deepEqual(prompts, []); assert.deepEqual(work, []); for (const options of messageOptions) assert.deepEqual(options, { triggerTurn: false }); }, command: (args: string) => command.handler(args, ctx), emit: (name: string, event = {}) => events.get(name)?.(event, ctx) };
+  return { events, tools, pi, ctx, messages, prompts, widgets, manager, completions: (prefix: string) => command.getArgumentCompletions(prefix), assertNoWork: () => { assert.deepEqual(prompts, []); assert.deepEqual(work, []); for (const options of messageOptions) assert.deepEqual(options, { triggerTurn: false }); }, command: (args: string) => command.handler(args, ctx), emit: (name: string, event = {}) => events.get(name)?.(event, ctx) };
 }
 function seed(manager: SessionManager) {
   manager.appendMessage({ role: "user", content: "fixture session", timestamp: Date.now() });
@@ -55,6 +57,65 @@ test("mode new/off, resume/reload, compaction, tree and fork follow real Session
     assert.equal(restoreState(fork.manager.getBranch()).enabled, true); assert.equal(restoreState(fork.manager.getBranch()).items.length, 0);
     fork.manager.newSession(); await fork.emit("session_start", { reason: "new" }); assert.equal(restoreState(fork.manager.getBranch()).enabled, false);
     assert.equal(h.prompts.length, 0, "mode never starts model turns or goals");
+  } finally { f.cleanup(); }
+});
+test("checklist widget bounds rendered rows while retaining full branch details", async () => {
+  const f = fixture(); try {
+    const h = harness(f); seed(h.manager); h.ctx.mode = "tui";
+    const text = "2. Binary-search the cause.\n\tConfirm 界 🐴 e\u0301 with runtime evidence. ".repeat(20);
+    const state = updateChecklist(emptyState(), { action: "start", playbook: "Bug fix\nLong async workflow", steps: Array.from({ length: 100 }, () => text) });
+    state.enabled = true;
+    for (const item of state.items.slice(0, 9)) item.status = "done";
+    state.items[0].status = "skipped"; state.items[0].reason = "Owner requires a different workflow.\nKeep this complete.";
+    h.manager.appendCustomEntry(STATE_TYPE, state);
+    const leaf = h.manager.getLeafId()!;
+    await h.emit("session_start", { reason: "resume" });
+    const widget = h.widgets.get("pistack-checklist");
+    assert.ok(widget, "a nonempty checklist has a widget");
+    const component = Array.isArray(widget) ? new Text(widget.join("\n"), 0, 0) : widget({}, {}, {});
+    for (const width of [40, 80, 160, 40]) {
+      component.invalidate();
+      const lines = component.render(width);
+      assert.equal(lines.length, 2, `checklist must occupy two rendered rows at width ${width}`);
+      for (const line of lines) {
+        assert.ok(visibleWidth(line) <= width);
+        assert.doesNotMatch(line, /[\r\n\t]/);
+      }
+      assert.match(lines[1], /^Next #10: 2\. Binary-search/);
+    }
+    assert.match(component.render(160)[0], /8 done.*1 skipped.*91 pending.*\/pistack checklist/);
+    assert.doesNotMatch(component.render(160)[0], /piStack ON/);
+    await h.command("checklist");
+    assert.ok(h.messages.at(-1)!.includes(text));
+    assert.ok(h.messages.at(-1)!.includes(state.items[0].reason!));
+    const result = await h.tools.get("pistack_checklist").execute("list", { action: "list" }, undefined, undefined, h.ctx);
+    assert.deepEqual(result.details.state, state);
+    assert.ok(result.content[0].text.includes(text));
+    assert.ok((await h.emit("before_agent_start", { systemPrompt: "BASE" })).systemPrompt.includes(text));
+    assert.deepEqual(restoreState(h.manager.getBranch()), state);
+    assert.equal(h.manager.getLeafId(), leaf, "rendering and inspection must not append state");
+    for (const status of ["done", "skipped"] as const) {
+      const complete = structuredClone(state);
+      for (const item of complete.items) { item.status = status; item.reason = status === "skipped" ? "Not applicable" : undefined; }
+      h.manager.appendCustomEntry(STATE_TYPE, complete);
+      await h.emit("session_tree");
+      const lines = h.widgets.get("pistack-checklist")({}, {}, {}).render(160);
+      assert.equal(lines.length, 1);
+      assert.ok(lines[0].includes(`100 ${status}`));
+    }
+    h.manager.branch(leaf);
+    await h.emit("session_start", { reason: "reload" });
+    assert.match(h.widgets.get("pistack-checklist")({}, {}, {}).render(80)[1], /^Next #10:/);
+    await h.command("off");
+    assert.equal(h.widgets.get("pistack-checklist")({}, {}, {}).render(80).length, 2);
+    h.manager.appendCustomEntry(STATE_TYPE, emptyState());
+    await h.emit("session_tree");
+    assert.equal(h.widgets.get("pistack-checklist"), undefined);
+    h.ctx.mode = "rpc"; h.widgets.clear(); h.manager.branch(leaf);
+    await h.emit("session_start", { reason: "resume" });
+    assert.equal(h.widgets.size, 0, "RPC must not receive a custom TUI factory");
+    await h.command("checklist");
+    assert.ok(h.messages.at(-1)!.includes(text));
   } finally { f.cleanup(); }
 });
 test("checklist rejects silent skips, malformed snapshots, unknown IDs and canceled mutation", async () => {
